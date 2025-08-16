@@ -8,7 +8,9 @@ from PyQt6.QtGui import QIcon
 from pathlib import Path
 
 from core.script_loader import ScriptLoader
+from core.divider_script import DividerScript
 from .script_widget import ScriptWidget
+from .divider_widget import DividerWidget
 from .styles import MAIN_STYLE
 
 logger = logging.getLogger('GUI.MainWindow')
@@ -94,18 +96,39 @@ class MainWindow(QMainWindow):
             else:
                 for script in scripts:
                     try:
-                        metadata = script.get_metadata()
-                        logger.debug(f"Creating widget for script: {metadata.get('name', 'Unknown')}")
-                        widget = ScriptWidget(script)
-                        self.script_widgets.append(widget)
-                        self.script_list_layout.addWidget(widget)
-                        logger.debug(f"Successfully added widget for: {metadata.get('name', 'Unknown')}")
+                        # Check if it's a divider
+                        if isinstance(script, DividerScript):
+                            metadata = script.get_metadata()
+                            logger.debug(f"Creating divider widget: {metadata}")
+                            divider = DividerWidget(
+                                label=metadata.get('label'),
+                                style=metadata.get('style', 'default')
+                            )
+                            self.script_list_layout.addWidget(divider)
+                            logger.debug("Successfully added divider widget")
+                        else:
+                            # Regular script widget
+                            metadata = script.get_metadata()
+                            logger.debug(f"Creating widget for script: {metadata.get('name', 'Unknown')}")
+                            widget = ScriptWidget(script)
+                            self.script_widgets.append(widget)
+                            self.script_list_layout.addWidget(widget)
+                            logger.debug(f"Successfully added widget for: {metadata.get('name', 'Unknown')}")
                     except Exception as e:
                         logger.error(f"Error creating widget for script: {e}", exc_info=True)
                 
                 self.script_list_layout.addStretch()
-                self.status_label.setText(f"Loaded {len(scripts)} script(s)")
-                logger.info(f"Successfully loaded {len(scripts)} script widget(s)")
+                
+                # Count actual scripts (not dividers)
+                script_count = len([s for s in scripts if not isinstance(s, DividerScript)])
+                divider_count = len([s for s in scripts if isinstance(s, DividerScript)])
+                
+                status_text = f"Loaded {script_count} script(s)"
+                if divider_count > 0:
+                    logger.info(f"Also loaded {divider_count} divider(s)")
+                
+                self.status_label.setText(status_text)
+                logger.info(f"Successfully loaded {script_count} script widget(s) and {divider_count} divider(s)")
             
             failed_scripts = self.script_loader.get_failed_scripts()
             if failed_scripts:
