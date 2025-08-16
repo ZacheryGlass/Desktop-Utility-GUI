@@ -1,4 +1,5 @@
 import sys
+import logging
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
                              QScrollArea, QLabel, QPushButton,
                              QHBoxLayout, QMessageBox)
@@ -10,25 +11,31 @@ from core.script_loader import ScriptLoader
 from .script_widget import ScriptWidget
 from .styles import MAIN_STYLE
 
+logger = logging.getLogger('GUI.MainWindow')
+
 class MainWindow(QMainWindow):
     scripts_reloaded = pyqtSignal()
     
     def __init__(self, scripts_directory: str = "scripts"):
         super().__init__()
+        logger.info(f"Initializing MainWindow with scripts directory: {scripts_directory}")
         self.scripts_directory = scripts_directory
         self.script_loader = ScriptLoader(scripts_directory)
         self.script_widgets = []
         self.init_ui()
         self.load_scripts()
         
+        logger.info("Setting up refresh timer (5 second interval)")
         self.refresh_timer = QTimer()
         self.refresh_timer.timeout.connect(self.refresh_status)
         self.refresh_timer.start(5000)
     
     def init_ui(self):
+        logger.debug("Initializing UI components")
         self.setWindowTitle("Desktop Utility GUI")
         self.setGeometry(100, 100, 600, 700)
         self.setStyleSheet(MAIN_STYLE)
+        logger.debug("Main window configured: 600x700 at position (100,100)")
         
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -70,12 +77,15 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.status_label)
     
     def load_scripts(self):
+        logger.info("Loading scripts...")
         self.clear_scripts()
         
         try:
             scripts = self.script_loader.discover_scripts()
+            logger.info(f"Script loader discovered {len(scripts)} script(s)")
             
             if not scripts:
+                logger.warning(f"No scripts found in '{self.scripts_directory}' directory")
                 no_scripts_label = QLabel("No scripts found in the scripts directory")
                 no_scripts_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 no_scripts_label.setStyleSheet("color: #999; padding: 40px; font-size: 14px;")
@@ -84,26 +94,35 @@ class MainWindow(QMainWindow):
             else:
                 for script in scripts:
                     try:
+                        metadata = script.get_metadata()
+                        logger.debug(f"Creating widget for script: {metadata.get('name', 'Unknown')}")
                         widget = ScriptWidget(script)
                         self.script_widgets.append(widget)
                         self.script_list_layout.addWidget(widget)
+                        logger.debug(f"Successfully added widget for: {metadata.get('name', 'Unknown')}")
                     except Exception as e:
-                        print(f"Error creating widget for script: {e}")
+                        logger.error(f"Error creating widget for script: {e}", exc_info=True)
                 
                 self.script_list_layout.addStretch()
                 self.status_label.setText(f"Loaded {len(scripts)} script(s)")
+                logger.info(f"Successfully loaded {len(scripts)} script widget(s)")
             
             failed_scripts = self.script_loader.get_failed_scripts()
             if failed_scripts:
                 failed_count = len(failed_scripts)
+                logger.warning(f"{failed_count} script(s) failed to load:")
+                for script_name, error in failed_scripts.items():
+                    logger.warning(f"  - {script_name}: {error}")
                 current_text = self.status_label.text()
                 self.status_label.setText(f"{current_text} | {failed_count} script(s) failed to load")
                 
         except Exception as e:
+            logger.error(f"Critical error loading scripts: {str(e)}", exc_info=True)
             QMessageBox.critical(self, "Error", f"Failed to load scripts: {str(e)}")
             self.status_label.setText("Error loading scripts")
     
     def clear_scripts(self):
+        logger.debug(f"Clearing {len(self.script_widgets)} existing script widgets")
         while self.script_list_layout.count():
             item = self.script_list_layout.takeAt(0)
             if item.widget():
@@ -111,14 +130,17 @@ class MainWindow(QMainWindow):
         self.script_widgets.clear()
     
     def reload_scripts(self):
+        logger.info("User triggered script reload")
         self.status_label.setText("Reloading scripts...")
         self.script_loader.reload_scripts()
         self.load_scripts()
         self.scripts_reloaded.emit()
+        logger.info("Script reload complete")
     
     def refresh_status(self):
+        logger.debug(f"Refreshing status for {len(self.script_widgets)} script(s)")
         for widget in self.script_widgets:
             try:
                 widget.update_status()
             except Exception as e:
-                print(f"Error updating status for widget: {e}")
+                logger.error(f"Error updating status for widget: {e}")

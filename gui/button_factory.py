@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, Callable, Any
 from PyQt6.QtWidgets import (QPushButton, QComboBox, QSlider, QLineEdit,
                              QSpinBox, QDoubleSpinBox, QWidget, QHBoxLayout,
@@ -7,6 +8,8 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from core.button_types import (ButtonType, ButtonOptions, ToggleOptions, 
                                CycleOptions, SelectOptions, NumberOptions,
                                SliderOptions, TextInputOptions, RunOptions)
+
+logger = logging.getLogger('GUI.ButtonFactory')
 
 class ToggleButton(QPushButton):
     toggled_custom = pyqtSignal(bool)
@@ -111,21 +114,28 @@ class ButtonFactory:
         if isinstance(button_type, str):
             try:
                 button_type = ButtonType(button_type)
+                logger.debug(f"Converted string '{button_type}' to ButtonType")
             except ValueError:
+                logger.warning(f"Unknown button type string: '{button_type}', defaulting to RUN")
                 button_type = ButtonType.RUN
+        
+        logger.debug(f"Creating button of type: {button_type.value}")
         
         if button_type == ButtonType.RUN:
             opts = options if isinstance(options, RunOptions) else RunOptions()
             button = QPushButton(opts.button_text)
             button.clicked.connect(lambda: callback())
+            logger.debug(f"Created RUN button with text: '{opts.button_text}'")
             return button
         
         elif button_type == ButtonType.TOGGLE:
             opts = options if isinstance(options, ToggleOptions) else ToggleOptions()
+            logger.debug(f"Created TOGGLE button: {opts.on_label}/{opts.off_label}")
             return ToggleButton(opts, callback)
         
         elif button_type == ButtonType.CYCLE:
             opts = options if isinstance(options, CycleOptions) else CycleOptions()
+            logger.debug(f"Created CYCLE button with {len(opts.options)} options")
             return CycleButton(opts, callback)
         
         elif button_type == ButtonType.SELECT:
@@ -135,6 +145,7 @@ class ButtonFactory:
                 combo.addItems(opts.options)
             combo.setPlaceholderText(opts.placeholder)
             combo.currentTextChanged.connect(callback)
+            logger.debug(f"Created SELECT dropdown with {len(opts.options) if opts.options else 0} options")
             return combo
         
         elif button_type == ButtonType.NUMBER:
@@ -158,6 +169,7 @@ class ButtonFactory:
         
         elif button_type == ButtonType.SLIDER:
             opts = options if isinstance(options, SliderOptions) else SliderOptions()
+            logger.debug(f"Created SLIDER: range {opts.min_value}-{opts.max_value}")
             return SliderWidget(opts, callback)
         
         elif button_type == ButtonType.TEXT_INPUT:
@@ -185,6 +197,7 @@ class ButtonFactory:
             return button
         
         else:
+            logger.warning(f"Unhandled button type: {button_type}, creating default RUN button")
             button = QPushButton("Run")
             button.clicked.connect(lambda: callback())
             return button

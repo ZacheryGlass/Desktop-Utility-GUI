@@ -1,3 +1,4 @@
+import logging
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, 
                              QLabel, QMessageBox, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, pyqtSlot
@@ -7,6 +8,8 @@ from core.base_script import UtilityScript
 from core.button_types import ButtonType
 from .button_factory import ButtonFactory
 from .styles import SCRIPT_WIDGET_STYLE
+
+logger = logging.getLogger('GUI.ScriptWidget')
 
 class ScriptExecutor(QThread):
     finished = pyqtSignal(dict)
@@ -32,6 +35,9 @@ class ScriptWidget(QWidget):
         super().__init__()
         self.script = script
         self.metadata = script.get_metadata()
+        logger.info(f"Creating widget for script: {self.metadata.get('name', 'Unknown')}")
+        logger.debug(f"  Type: {self.metadata.get('button_type', 'Unknown')}")
+        logger.debug(f"  Description: {self.metadata.get('description', 'None')}")
         self.executor = None
         self.button_factory = ButtonFactory()
         self.init_ui()
@@ -80,12 +86,16 @@ class ScriptWidget(QWidget):
             main_layout.addWidget(self.action_widget)
         
         if not self.script.is_available():
+            logger.warning(f"Script '{self.metadata.get('name', 'Unknown')}' is not available on this system")
             self.setEnabled(False)
             self.status_label.setText("Script not available on this system")
+        else:
+            logger.debug(f"Script '{self.metadata.get('name', 'Unknown')}' is available and ready")
     
     def update_status(self):
         try:
             status = self.script.get_status_display()
+            logger.debug(f"Status update for '{self.metadata.get('name', 'Unknown')}': {status}")
             
             button_type = self.metadata.get('button_type', ButtonType.RUN)
             
@@ -115,21 +125,29 @@ class ScriptWidget(QWidget):
             self.status_label.setText(status_text)
             
         except Exception as e:
+            logger.error(f"Error updating status for '{self.metadata.get('name', 'Unknown')}': {str(e)}")
             self.status_label.setText(f"Error: {str(e)}")
     
     @pyqtSlot()
     def on_action_triggered(self, *args, **kwargs):
+        script_name = self.metadata.get('name', 'Unknown')
+        logger.info(f"Action triggered for script: {script_name}")
+        logger.debug(f"  Args: {args}, Kwargs: {kwargs}")
+        
         if self.executor and self.executor.isRunning():
+            logger.warning(f"Script '{script_name}' is already running")
             QMessageBox.warning(self, "Script Running", 
                               "Script is already running. Please wait for it to complete.")
             return
         
         try:
             if not self.script.validate():
+                logger.error(f"Validation failed for script '{script_name}'")
                 QMessageBox.warning(self, "Validation Failed", 
                                    "Script validation failed. Cannot execute.")
                 return
             
+            logger.info(f"Executing script '{script_name}'...")
             self.setEnabled(False)
             self.status_label.setText("Running...")
             
@@ -139,14 +157,20 @@ class ScriptWidget(QWidget):
             self.executor.start()
             
         except Exception as e:
+            logger.error(f"Error starting script '{script_name}': {str(e)}", exc_info=True)
             self.on_execution_error(str(e))
     
     @pyqtSlot(dict)
     def on_execution_finished(self, result):
+        script_name = self.metadata.get('name', 'Unknown')
         self.setEnabled(True)
         
         success = result.get('success', False)
         message = result.get('message', '')
+        
+        logger.info(f"Script '{script_name}' execution finished - Success: {success}")
+        if message:
+            logger.info(f"  Message: {message}")
         
         if success:
             self.status_label.setText("Success")
@@ -162,6 +186,8 @@ class ScriptWidget(QWidget):
     
     @pyqtSlot(str)
     def on_execution_error(self, error_msg):
+        script_name = self.metadata.get('name', 'Unknown')
+        logger.error(f"Script '{script_name}' execution error: {error_msg}")
         self.setEnabled(True)
         self.status_label.setText(f"Error: {error_msg}")
         QMessageBox.critical(self, "Execution Error", 
