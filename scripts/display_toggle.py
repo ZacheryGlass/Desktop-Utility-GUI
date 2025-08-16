@@ -32,30 +32,39 @@ class DisplayToggle(UtilityScript):
     
     def get_status(self) -> bool:
         try:
+            powershell_script = '''
+            Add-Type @"
+            using System;
+            using System.Runtime.InteropServices;
+            public class Display {
+                [DllImport("user32.dll")]
+                public static extern int GetSystemMetrics(int nIndex);
+                
+                public static int GetMonitorCount() {
+                    return GetSystemMetrics(80); // SM_CMONITORS
+                }
+            }
+"@
+            [Display]::GetMonitorCount()
+            '''
+            
             result = subprocess.run(
-                ['wmic', 'path', 'Win32_DesktopMonitor', 'get', 'DeviceID'],
+                ['powershell', '-Command', powershell_script],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             )
             
-            monitor_count = len([line for line in result.stdout.split('\n') 
-                               if line.strip() and 'DeviceID' not in line])
+            if result.returncode == 0:
+                try:
+                    monitor_count = int(result.stdout.strip())
+                    if monitor_count < 2:
+                        return None
+                except:
+                    pass
             
-            if monitor_count < 2:
-                return None
-            
-            try:
-                result = subprocess.run(
-                    ['powershell', '-Command', 
-                     '(Get-DisplayResolution).Count -gt 1'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                return 'true' in result.stdout.lower()
-            except:
-                return True
+            return None
                 
         except Exception as e:
             print(f"Error getting display status: {e}")

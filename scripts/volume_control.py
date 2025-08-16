@@ -73,7 +73,8 @@ class VolumeControl(UtilityScript):
                 ['powershell', '-Command', script],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             )
             
             if result.returncode == 0:
@@ -158,7 +159,8 @@ class VolumeControl(UtilityScript):
                 ['powershell', '-Command', powershell_script],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             )
             
             if result.returncode == 0:

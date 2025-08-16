@@ -76,6 +76,7 @@ class SliderWidget(QWidget):
         super().__init__()
         self.options = options
         self.callback = callback
+        self.is_updating = False
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -98,11 +99,15 @@ class SliderWidget(QWidget):
         if self.options.show_value:
             display_text = f"{float_value}{self.options.suffix}"
             self.value_label.setText(display_text)
-        self.callback(float_value)
-        self.value_changed.emit(float_value)
+        
+        if not self.is_updating:
+            self.callback(float_value)
+            self.value_changed.emit(float_value)
     
     def setValue(self, value):
+        self.is_updating = True
         self.slider.setValue(int(value))
+        self.is_updating = False
 
 class ButtonFactory:
     
