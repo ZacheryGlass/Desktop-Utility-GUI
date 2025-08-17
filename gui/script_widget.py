@@ -173,11 +173,15 @@ class ScriptWidget(QWidget):
             logger.info(f"  Message: {message}")
         
         if success:
-            self.status_label.setText("Success")
+            # Show success in status label with message if available
             if message:
-                QMessageBox.information(self, "Script Completed", message)
+                self.status_label.setText(f"Success: {message}")
+            else:
+                self.status_label.setText("Success")
+            # No popup for success
         else:
             self.status_label.setText("Failed")
+            # Only show popup for failures (keep error notifications)
             if message:
                 QMessageBox.warning(self, "Script Failed", message)
         
