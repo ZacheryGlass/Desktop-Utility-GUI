@@ -4,9 +4,8 @@ import importlib.util
 import traceback
 import logging
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 from .base_script import UtilityScript
-from .divider_script import DividerScript
 from .exceptions import ScriptLoadError
 
 logger = logging.getLogger('Core.ScriptLoader')
@@ -15,11 +14,11 @@ class ScriptLoader:
     
     def __init__(self, scripts_directory: str = "scripts"):
         self.scripts_directory = Path(scripts_directory)
-        self.loaded_scripts: Dict[str, Union[UtilityScript, DividerScript]] = {}
+        self.loaded_scripts: Dict[str, UtilityScript] = {}
         self.failed_scripts: Dict[str, str] = {}
         logger.info(f"ScriptLoader initialized with directory: {self.scripts_directory.absolute()}")
     
-    def discover_scripts(self) -> List[Union[UtilityScript, DividerScript]]:
+    def discover_scripts(self) -> List[UtilityScript]:
         logger.info(f"Discovering scripts in: {self.scripts_directory}")
         scripts = []
         self.failed_scripts.clear()
@@ -32,7 +31,7 @@ class ScriptLoader:
         script_files = list(self.scripts_directory.glob("*.py"))
         logger.info(f"Found {len(script_files)} Python files in scripts directory")
         
-        # Sort files to ensure consistent ordering, with dividers in their proper positions
+        # Sort files to ensure consistent ordering
         script_files.sort(key=lambda f: f.name.lower())
         
         for script_file in script_files:
@@ -55,7 +54,7 @@ class ScriptLoader:
         logger.info(f"Script discovery complete: {len(scripts)} loaded, {len(self.failed_scripts)} failed")
         return scripts
     
-    def _load_script(self, script_path: Path) -> Optional[Union[UtilityScript, DividerScript]]:
+    def _load_script(self, script_path: Path) -> Optional[UtilityScript]:
         module_name = script_path.stem
         logger.debug(f"Loading module: {module_name} from {script_path}")
         
@@ -68,22 +67,7 @@ class ScriptLoader:
             sys.modules[module_name] = module
             spec.loader.exec_module(module)
             
-            # Check for DividerScript first
-            for item_name in dir(module):
-                item = getattr(module, item_name)
-                if (isinstance(item, type) and 
-                    issubclass(item, DividerScript) and 
-                    item != DividerScript):
-                    
-                    logger.debug(f"Found DividerScript class: {item_name}")
-                    try:
-                        instance = item()
-                        logger.debug(f"Created divider: {instance.get_metadata()}")
-                        return instance
-                    except Exception as e:
-                        logger.error(f"Failed to instantiate divider {item_name}: {str(e)}")
-            
-            # Then check for UtilityScript
+            # Check for UtilityScript
             for item_name in dir(module):
                 item = getattr(module, item_name)
                 if (isinstance(item, type) and 

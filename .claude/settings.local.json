@@ -5,7 +5,8 @@
       "Bash(git add:*)",
       "Bash(python:*)",
       "Bash(powershell:*)",
-      "Bash(where DisplaySwitch.exe)"
+      "Bash(where DisplaySwitch.exe)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []

@@ -7,7 +7,6 @@ from PyQt6.QtGui import QFont
 from core.base_script import UtilityScript
 from core.button_types import ButtonType
 from .button_factory import ButtonFactory
-from .styles import SCRIPT_WIDGET_STYLE
 
 logger = logging.getLogger('GUI.ScriptWidget')
 
@@ -33,6 +32,8 @@ class ScriptWidget(QWidget):
     
     def __init__(self, script: UtilityScript):
         super().__init__()
+        # CRITICAL FIX: Enable styled background painting for custom QWidget subclass
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.script = script
         self.metadata = script.get_metadata()
         logger.info(f"Creating widget for script: {self.metadata.get('name', 'Unknown')}")
@@ -45,7 +46,19 @@ class ScriptWidget(QWidget):
     
     def init_ui(self):
         self.setObjectName("scriptWidget")
-        self.setStyleSheet(SCRIPT_WIDGET_STYLE)
+        # Apply direct styling with visible borders matching header style
+        self.setStyleSheet("""
+            ScriptWidget {
+                background: rgba(255, 255, 255, 0.95);
+                border: 1px solid rgba(226, 232, 240, 0.8);
+                border-radius: 16px;
+                margin: 8px;
+            }
+            ScriptWidget:hover {
+                border: 1px solid rgba(59, 130, 246, 0.5);
+                background: rgba(255, 255, 255, 1.0);
+            }
+        """)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.setMinimumHeight(140)
         self.setMaximumHeight(160)
