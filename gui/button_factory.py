@@ -8,6 +8,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from core.button_types import (ButtonType, ButtonOptions, ToggleOptions, 
                                CycleOptions, SelectOptions, NumberOptions,
                                SliderOptions, TextInputOptions, RunOptions)
+from .modern_widgets import SegmentedControl, EnhancedSlider, ButtonGroup
 
 logger = logging.getLogger('GUI.ButtonFactory')
 
@@ -140,8 +141,13 @@ class ButtonFactory:
         
         elif button_type == ButtonType.CYCLE:
             opts = options if isinstance(options, CycleOptions) else CycleOptions()
-            logger.debug(f"Created CYCLE button with {len(opts.options)} options")
-            return CycleButton(opts, callback)
+            # Decide between SegmentedControl and ButtonGroup based on number of options
+            if len(opts.options) <= 4:
+                logger.debug(f"Created SEGMENTED CONTROL with {len(opts.options)} options")
+                return SegmentedControl(opts.options, callback)
+            else:
+                logger.debug(f"Created BUTTON GROUP with {len(opts.options)} options")
+                return ButtonGroup(opts.options, callback)
         
         elif button_type == ButtonType.SELECT:
             opts = options if isinstance(options, SelectOptions) else SelectOptions()
@@ -174,8 +180,15 @@ class ButtonFactory:
         
         elif button_type == ButtonType.SLIDER:
             opts = options if isinstance(options, SliderOptions) else SliderOptions()
-            logger.debug(f"Created SLIDER: range {opts.min_value}-{opts.max_value}")
-            return SliderWidget(opts, callback)
+            logger.debug(f"Created ENHANCED SLIDER: range {opts.min_value}-{opts.max_value}")
+            return EnhancedSlider(
+                min_val=opts.min_value,
+                max_val=opts.max_value,
+                step=opts.step,
+                suffix=opts.suffix,
+                show_value=opts.show_value,
+                callback=callback
+            )
         
         elif button_type == ButtonType.TEXT_INPUT:
             opts = options if isinstance(options, TextInputOptions) else TextInputOptions()

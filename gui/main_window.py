@@ -10,6 +10,7 @@ from pathlib import Path
 from core.script_loader import ScriptLoader
 from .script_widget import ScriptWidget
 from .styles import MAIN_STYLE
+from .theme_manager import ThemeManager
 
 logger = logging.getLogger('GUI.MainWindow')
 
@@ -22,8 +23,16 @@ class MainWindow(QMainWindow):
         self.scripts_directory = scripts_directory
         self.script_loader = ScriptLoader(scripts_directory)
         self.script_widgets = []
+        
+        # Initialize theme manager
+        self.theme_manager = ThemeManager()
+        self.theme_manager.theme_changed.connect(self.on_theme_changed)
+        
         self.init_ui()
         self.load_scripts()
+        
+        # Apply initial theme
+        self.theme_manager.apply_theme()
         
         logger.info("Setting up refresh timer (5 second interval)")
         self.refresh_timer = QTimer()
@@ -70,11 +79,25 @@ class MainWindow(QMainWindow):
         title_container.addLayout(title_section)
         title_container.addStretch()
         
-        # Refresh button
-        refresh_button = QPushButton("Refresh")
+        # Header buttons container
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(12)
+        
+        # Theme toggle button
+        self.theme_button = QPushButton("🌙")  # Moon icon for dark mode
+        self.theme_button.setObjectName("themeButton")
+        self.theme_button.setFixedSize(44, 44)
+        self.theme_button.setToolTip("Toggle light/dark theme")
+        self.theme_button.clicked.connect(self.toggle_theme)
+        buttons_layout.addWidget(self.theme_button)
+        
+        # Refresh button with icon
+        refresh_button = QPushButton("🔄 Refresh")
         refresh_button.setObjectName("refreshButton")
         refresh_button.clicked.connect(self.reload_scripts)
-        title_container.addWidget(refresh_button)
+        buttons_layout.addWidget(refresh_button)
+        
+        title_container.addLayout(buttons_layout)
         
         header_layout.addLayout(title_container)
         main_layout.addWidget(header_widget)
@@ -170,3 +193,20 @@ class MainWindow(QMainWindow):
                 widget.update_status()
             except Exception as e:
                 logger.error(f"Error updating status for widget: {e}")
+    
+    def toggle_theme(self):
+        """Toggle between light and dark themes"""
+        self.theme_manager.toggle_theme()
+        logger.info(f"Theme toggled to: {self.theme_manager.get_current_theme()}")
+    
+    def on_theme_changed(self, theme_name):
+        """Handle theme change event"""
+        # Update theme button icon and tooltip
+        if theme_name == 'dark':
+            self.theme_button.setText("☀️")  # Sun icon for light mode
+            self.theme_button.setToolTip("Switch to light theme")
+        else:
+            self.theme_button.setText("🌙")  # Moon icon for dark mode
+            self.theme_button.setToolTip("Switch to dark theme")
+        
+        logger.debug(f"Theme changed to: {theme_name}")

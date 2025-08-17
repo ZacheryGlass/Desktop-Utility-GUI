@@ -26,6 +26,9 @@ def setup_logging():
     return logger
 
 def main():
+    # Change to script directory to ensure correct working directory
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    
     logger = setup_logging()
     
     logger.info("="*60)

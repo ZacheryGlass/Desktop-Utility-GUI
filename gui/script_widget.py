@@ -1,4 +1,5 @@
 import logging
+import time
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, 
                              QLabel, QMessageBox, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, pyqtSlot
@@ -41,6 +42,8 @@ class ScriptWidget(QWidget):
         logger.debug(f"  Description: {self.metadata.get('description', 'None')}")
         self.executor = None
         self.button_factory = ButtonFactory()
+        self.last_execution_time = 0
+        self.min_execution_interval = 0.5  # Minimum 500ms between executions
         self.init_ui()
         self.update_status()
     
@@ -158,10 +161,14 @@ class ScriptWidget(QWidget):
         logger.info(f"Action triggered for script: {script_name}")
         logger.debug(f"  Args: {args}, Kwargs: {kwargs}")
         
+        # Check for rapid execution (throttling)
+        current_time = time.time()
+        if current_time - self.last_execution_time < self.min_execution_interval:
+            logger.debug(f"Throttling execution for script '{script_name}' - too rapid")
+            return
+        
         if self.executor and self.executor.isRunning():
             logger.warning(f"Script '{script_name}' is already running")
-            QMessageBox.warning(self, "Script Running", 
-                              "Script is already running. Please wait for it to complete.")
             return
         
         try:
@@ -172,6 +179,7 @@ class ScriptWidget(QWidget):
                 return
             
             logger.info(f"Executing script '{script_name}'...")
+            self.last_execution_time = current_time  # Update last execution time
             self.setEnabled(False)
             self.status_label.setText("Running...")
             self.status_label.setProperty("status", "running")
