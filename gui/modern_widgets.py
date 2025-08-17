@@ -45,10 +45,8 @@ class SegmentedControl(QWidget):
             self.buttons.append(button)
             layout.addWidget(button)
         
-        # Set initial selection
-        if self.buttons:
-            self.buttons[0].setChecked(True)
-            self.update_button_styles()
+        # Don't set initial selection - let set_current() handle this
+        # This prevents defaulting to first option when widget is recreated
     
     def on_segment_clicked(self, index):
         """Handle segment button click"""
@@ -211,9 +209,8 @@ class ButtonGroup(QWidget):
             self.buttons.append(button)
             layout.addWidget(button)
         
-        # Set initial selection
-        if self.buttons:
-            self.buttons[0].setChecked(True)
+        # Don't set initial selection - let set_current() handle this
+        # This prevents defaulting to first option when widget is recreated
     
     def on_button_clicked(self, index):
         """Handle button click"""

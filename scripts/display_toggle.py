@@ -1,6 +1,8 @@
 import subprocess
 from typing import Dict, Any
 import sys
+import os
+from pathlib import Path
 
 sys.path.append('..')
 from core.base_script import UtilityScript
@@ -18,8 +20,63 @@ class DisplayToggle(UtilityScript):
         }
         self.mode_order = ['Extend', 'Duplicate', 'PC Only', 'Second Only']
         self.current_mode_index = 0
+        
+        # State file for tracking current display mode
+        self.state_file = Path.home() / '.desktop_utility_gui' / 'display_mode_state.txt'
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize with saved state or default
+        self._load_saved_state()
+        
         # Call super().__init__() after setting attributes
         super().__init__()
+    
+    def _load_saved_state(self):
+        """Load the saved display mode state from file."""
+        try:
+            # First check our own state file
+            if self.state_file.exists():
+                with open(self.state_file, 'r') as f:
+                    saved_mode = f.read().strip()
+                    # Handle both our format and the legacy format from toggle_display.py
+                    if saved_mode.lower() == 'clone':
+                        saved_mode = 'Duplicate'
+                    elif saved_mode.lower() == 'extend':
+                        saved_mode = 'Extend'
+                        
+                    if saved_mode in self.mode_order:
+                        self.current_mode_index = self.mode_order.index(saved_mode)
+                        return
+            
+            # Also check the legacy state file from toggle_display.py in current directory
+            legacy_state = Path('display_mode_state.txt')
+            if legacy_state.exists():
+                with open(legacy_state, 'r') as f:
+                    saved_mode = f.read().strip()
+                    if saved_mode.lower() == 'clone':
+                        saved_mode = 'Duplicate'
+                    elif saved_mode.lower() == 'extend':
+                        saved_mode = 'Extend'
+                        
+                    if saved_mode in self.mode_order:
+                        self.current_mode_index = self.mode_order.index(saved_mode)
+                        # Save to our location for future use
+                        self._save_state(saved_mode)
+                        return
+                        
+        except Exception:
+            pass
+        
+        # Default to Extend if no saved state or error
+        self.current_mode_index = 0
+    
+    def _save_state(self, mode: str):
+        """Save the current display mode state to file."""
+        try:
+            with open(self.state_file, 'w') as f:
+                f.write(mode)
+        except Exception:
+            pass
     
     def get_metadata(self) -> Dict[str, Any]:
         return {
@@ -33,9 +90,9 @@ class DisplayToggle(UtilityScript):
         }
     
     def get_status(self) -> str:
-        """Return status for display."""
-        # CycleButton handles the cycling, just return a generic status
-        return "Ready"
+        """Return the current display mode from saved state."""
+        # Simply return the saved state - no detection needed!
+        return self.mode_order[self.current_mode_index]
     
     def execute(self, mode_name: str) -> Dict[str, Any]:
         """Execute display mode change."""
@@ -46,7 +103,7 @@ class DisplayToggle(UtilityScript):
                     'message': f'Invalid display mode: {mode_name}'
                 }
             
-            # Build command - no need to manage index here, CycleButton handles it
+            # Build command
             display_switch_param = self.display_modes[mode_name]
             
             # Execute DisplaySwitch.exe with the appropriate parameter
@@ -60,6 +117,11 @@ class DisplayToggle(UtilityScript):
             
             if result.returncode == 0 or result.returncode is None:
                 # DisplaySwitch.exe often returns None even on success
+                # Update our saved state
+                if mode_name in self.mode_order:
+                    self.current_mode_index = self.mode_order.index(mode_name)
+                    self._save_state(mode_name)
+                
                 return {
                     'success': True,
                     'message': f'Display mode changed to: {mode_name}',
