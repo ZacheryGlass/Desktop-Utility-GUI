@@ -47,14 +47,15 @@ class ScriptWidget(QWidget):
         self.setObjectName("scriptWidget")
         self.setStyleSheet(SCRIPT_WIDGET_STYLE)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMaximumHeight(120)
+        self.setMinimumHeight(140)
+        self.setMaximumHeight(160)
         
         main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(24, 20, 24, 20)
+        main_layout.setSpacing(24)
         
         info_layout = QVBoxLayout()
-        info_layout.setSpacing(4)
+        info_layout.setSpacing(8)
         
         self.name_label = QLabel(self.metadata.get('name', 'Unnamed Script'))
         self.name_label.setObjectName("scriptName")
@@ -64,6 +65,9 @@ class ScriptWidget(QWidget):
         self.description_label.setObjectName("scriptDescription")
         self.description_label.setWordWrap(True)
         info_layout.addWidget(self.description_label)
+        
+        # Add some spacing before status
+        info_layout.addSpacing(6)
         
         self.status_label = QLabel("")
         self.status_label.setObjectName("scriptStatus")
@@ -120,13 +124,20 @@ class ScriptWidget(QWidget):
                     except (ValueError, TypeError):
                         pass
             else:
-                status_text = f"Ready" if status == "Unknown" else f"Status: {status}"
+                status_text = f"Ready" if status == "Unknown" else f"{status}"
             
             self.status_label.setText(status_text)
+            # Reset status property for neutral styling
+            self.status_label.setProperty("status", None)
+            self.status_label.style().unpolish(self.status_label)
+            self.status_label.style().polish(self.status_label)
             
         except Exception as e:
             logger.error(f"Error updating status for '{self.metadata.get('name', 'Unknown')}': {str(e)}")
             self.status_label.setText(f"Error: {str(e)}")
+            self.status_label.setProperty("status", "error")
+            self.status_label.style().unpolish(self.status_label)
+            self.status_label.style().polish(self.status_label)
     
     @pyqtSlot()
     def on_action_triggered(self, *args, **kwargs):
@@ -150,6 +161,9 @@ class ScriptWidget(QWidget):
             logger.info(f"Executing script '{script_name}'...")
             self.setEnabled(False)
             self.status_label.setText("Running...")
+            self.status_label.setProperty("status", "running")
+            self.status_label.style().unpolish(self.status_label)
+            self.status_label.style().polish(self.status_label)
             
             self.executor = ScriptExecutor(self.script, *args, **kwargs)
             self.executor.finished.connect(self.on_execution_finished)
@@ -178,12 +192,18 @@ class ScriptWidget(QWidget):
                 self.status_label.setText(f"Success: {message}")
             else:
                 self.status_label.setText("Success")
+            self.status_label.setProperty("status", "success")
             # No popup for success
         else:
             self.status_label.setText("Failed")
+            self.status_label.setProperty("status", "error")
             # Only show popup for failures (keep error notifications)
             if message:
                 QMessageBox.warning(self, "Script Failed", message)
+        
+        # Apply the status styling
+        self.status_label.style().unpolish(self.status_label)
+        self.status_label.style().polish(self.status_label)
         
         self.update_status()
         self.script_executed.emit(self.metadata.get('name', ''), result)
@@ -194,5 +214,8 @@ class ScriptWidget(QWidget):
         logger.error(f"Script '{script_name}' execution error: {error_msg}")
         self.setEnabled(True)
         self.status_label.setText(f"Error: {error_msg}")
+        self.status_label.setProperty("status", "error")
+        self.status_label.style().unpolish(self.status_label)
+        self.status_label.style().polish(self.status_label)
         QMessageBox.critical(self, "Execution Error", 
                            f"Script execution failed:\n{error_msg}")

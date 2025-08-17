@@ -34,41 +34,63 @@ class MainWindow(QMainWindow):
     
     def init_ui(self):
         logger.debug("Initializing UI components")
-        self.setWindowTitle("Desktop Utility GUI")
-        self.setGeometry(100, 100, 600, 700)
+        self.setWindowTitle("Desktop Utilities")
+        self.setGeometry(100, 100, 800, 900)
         self.setStyleSheet(MAIN_STYLE)
-        logger.debug("Main window configured: 600x700 at position (100,100)")
+        logger.debug("Main window configured: 800x900 at position (100,100)")
         
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
-        header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(20, 20, 20, 10)
+        # Create header widget with modern styling
+        header_widget = QWidget()
+        header_widget.setObjectName("headerWidget")
+        header_layout = QVBoxLayout(header_widget)
+        header_layout.setContentsMargins(32, 24, 32, 24)
+        header_layout.setSpacing(8)
+        
+        # Title and subtitle container
+        title_container = QHBoxLayout()
+        title_container.setContentsMargins(0, 0, 0, 0)
+        
+        # Title section
+        title_section = QVBoxLayout()
+        title_section.setSpacing(4)
         
         title_label = QLabel("Desktop Utilities")
         title_label.setObjectName("titleLabel")
-        header_layout.addWidget(title_label)
+        title_section.addWidget(title_label)
         
-        header_layout.addStretch()
+        subtitle_label = QLabel("Manage your desktop tools and settings")
+        subtitle_label.setObjectName("subtitleLabel")
+        title_section.addWidget(subtitle_label)
         
+        title_container.addLayout(title_section)
+        title_container.addStretch()
+        
+        # Refresh button
         refresh_button = QPushButton("Refresh")
+        refresh_button.setObjectName("refreshButton")
         refresh_button.clicked.connect(self.reload_scripts)
-        header_layout.addWidget(refresh_button)
+        title_container.addWidget(refresh_button)
         
-        main_layout.addLayout(header_layout)
+        header_layout.addLayout(title_container)
+        main_layout.addWidget(header_widget)
         
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
         self.script_list_widget = QWidget()
         self.script_list_widget.setObjectName("scriptListContainer")
         self.script_list_layout = QVBoxLayout(self.script_list_widget)
-        self.script_list_layout.setContentsMargins(10, 10, 10, 10)
-        self.script_list_layout.setSpacing(10)
+        self.script_list_layout.setContentsMargins(24, 16, 24, 24)
+        self.script_list_layout.setSpacing(16)
         
         self.scroll_area.setWidget(self.script_list_widget)
         main_layout.addWidget(self.scroll_area)

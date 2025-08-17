@@ -18,8 +18,8 @@ class DividerWidget(QWidget):
         logger.debug(f"Creating divider widget: '{self.label_text or 'no label'}' with style '{self.style_type}'")
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 5, 10, 5)
-        layout.setSpacing(2)
+        layout.setContentsMargins(24, 12, 24, 12)
+        layout.setSpacing(8)
         
         if self.label_text:
             # Create a labeled divider
@@ -64,49 +64,69 @@ class DividerWidget(QWidget):
             layout.addWidget(line)
         
         # Set widget properties
-        self.setMaximumHeight(40 if self.label_text else 20)
+        self.setMaximumHeight(60 if self.label_text else 30)
+        self.setMinimumHeight(50 if self.label_text else 25)
         
     def _get_line_style(self) -> str:
         """Get the style for the divider line based on style type."""
         styles = {
             "default": """
                 QFrame {
-                    color: #d0d0d0;
-                    background-color: #d0d0d0;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 transparent, 
+                                stop:0.2 rgba(226, 232, 240, 0.8), 
+                                stop:0.8 rgba(226, 232, 240, 0.8), 
+                                stop:1 transparent);
                     max-height: 1px;
                     min-height: 1px;
+                    border: none;
                 }
             """,
             "bold": """
                 QFrame {
-                    color: #a0a0a0;
-                    background-color: #a0a0a0;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 transparent, 
+                                stop:0.1 rgba(148, 163, 184, 0.8), 
+                                stop:0.9 rgba(148, 163, 184, 0.8), 
+                                stop:1 transparent);
                     max-height: 2px;
                     min-height: 2px;
+                    border: none;
                 }
             """,
             "section": """
                 QFrame {
-                    color: #2196F3;
-                    background-color: #2196F3;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 transparent, 
+                                stop:0.1 rgba(59, 130, 246, 0.6), 
+                                stop:0.5 rgba(59, 130, 246, 0.8), 
+                                stop:0.9 rgba(59, 130, 246, 0.6), 
+                                stop:1 transparent);
                     max-height: 2px;
                     min-height: 2px;
+                    border: none;
+                    border-radius: 1px;
                 }
             """,
             "subtle": """
                 QFrame {
-                    color: #e8e8e8;
-                    background-color: #e8e8e8;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 transparent, 
+                                stop:0.3 rgba(248, 250, 252, 0.9), 
+                                stop:0.7 rgba(248, 250, 252, 0.9), 
+                                stop:1 transparent);
                     max-height: 1px;
                     min-height: 1px;
+                    border: none;
                 }
             """,
             "dotted": """
                 QFrame {
                     border: none;
-                    border-top: 1px dotted #c0c0c0;
+                    border-top: 2px dotted rgba(203, 213, 225, 0.8);
                     max-height: 1px;
                     min-height: 1px;
+                    background: transparent;
                 }
             """
         }
@@ -117,41 +137,65 @@ class DividerWidget(QWidget):
         styles = {
             "default": """
                 QLabel {
-                    color: #666666;
-                    padding: 0px 10px;
-                    background-color: transparent;
+                    color: #64748b;
+                    padding: 4px 16px;
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(255, 255, 255, 0.9), 
+                                stop:1 rgba(248, 250, 252, 0.8));
+                    border-radius: 12px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    border: 1px solid rgba(226, 232, 240, 0.6);
                 }
             """,
             "bold": """
                 QLabel {
-                    color: #444444;
-                    padding: 0px 10px;
-                    background-color: transparent;
+                    color: #475569;
+                    padding: 6px 18px;
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(255, 255, 255, 0.95), 
+                                stop:1 rgba(241, 245, 249, 0.9));
+                    border-radius: 14px;
+                    font-size: 13px;
                     font-weight: 600;
+                    border: 1px solid rgba(148, 163, 184, 0.4);
                 }
             """,
             "section": """
                 QLabel {
-                    color: #2196F3;
-                    padding: 0px 15px;
-                    background-color: transparent;
-                    font-weight: bold;
+                    color: #1e40af;
+                    padding: 8px 20px;
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 rgba(59, 130, 246, 0.1), 
+                                stop:1 rgba(29, 78, 216, 0.05));
+                    border-radius: 16px;
+                    font-size: 14px;
+                    font-weight: 700;
+                    border: 1px solid rgba(59, 130, 246, 0.3);
+                    letter-spacing: 0.5px;
                 }
             """,
             "subtle": """
                 QLabel {
-                    color: #999999;
-                    padding: 0px 10px;
-                    background-color: transparent;
+                    color: #94a3b8;
+                    padding: 3px 14px;
+                    background: rgba(248, 250, 252, 0.7);
+                    border-radius: 10px;
                     font-size: 11px;
+                    font-weight: 500;
+                    border: 1px solid rgba(226, 232, 240, 0.5);
                 }
             """,
             "dotted": """
                 QLabel {
-                    color: #888888;
-                    padding: 0px 10px;
-                    background-color: transparent;
+                    color: #6b7280;
+                    padding: 4px 16px;
+                    background: rgba(249, 250, 251, 0.8);
+                    border-radius: 12px;
+                    font-size: 12px;
+                    font-weight: 500;
                     font-style: italic;
+                    border: 1px dotted rgba(203, 213, 225, 0.8);
                 }
             """
         }

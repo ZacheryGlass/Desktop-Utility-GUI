@@ -33,10 +33,9 @@ class DisplayToggle(UtilityScript):
         }
     
     def get_status(self) -> str:
-        """Return the next mode that will be activated."""
-        # Since we can't reliably detect current mode, 
-        # we'll just show what mode will be applied next
-        return self.mode_order[self.current_mode_index]
+        """Return status for display."""
+        # CycleButton handles the cycling, just return a generic status
+        return "Ready"
     
     def execute(self, mode_name: str) -> Dict[str, Any]:
         """Execute display mode change."""
@@ -47,13 +46,7 @@ class DisplayToggle(UtilityScript):
                     'message': f'Invalid display mode: {mode_name}'
                 }
             
-            # Update current mode index for next cycle
-            if mode_name in self.mode_order:
-                self.current_mode_index = self.mode_order.index(mode_name)
-                # Move to next mode for next click
-                self.current_mode_index = (self.current_mode_index + 1) % len(self.mode_order)
-            
-            # Build command
+            # Build command - no need to manage index here, CycleButton handles it
             display_switch_param = self.display_modes[mode_name]
             
             # Execute DisplaySwitch.exe with the appropriate parameter
