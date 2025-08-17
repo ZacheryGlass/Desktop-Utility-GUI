@@ -6,7 +6,8 @@
       "Bash(python:*)",
       "Bash(powershell:*)",
       "Bash(where DisplaySwitch.exe)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []
