@@ -151,17 +151,6 @@ class EnhancedSlider(QWidget):
             self.value_label = QLabel(f"{self.min_val}{self.suffix}")
             self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.value_label.setObjectName("sliderValue")
-            self.value_label.setStyleSheet("""
-                QLabel#sliderValue {
-                    font-size: 12px;
-                    font-weight: 600;
-                    color: #3b82f6;
-                    padding: 2px 8px;
-                    background: rgba(59, 130, 246, 0.1);
-                    border-radius: 6px;
-                    border: 1px solid rgba(59, 130, 246, 0.2);
-                }
-            """)
             slider_layout.addWidget(self.value_label)
         
         layout.addWidget(slider_container, 1)
@@ -218,28 +207,6 @@ class ButtonGroup(QWidget):
             button.setCheckable(True)
             button.setObjectName("groupButton")
             button.clicked.connect(lambda checked, idx=i: self.on_button_clicked(idx))
-            
-            # Custom styling for button group
-            button.setStyleSheet("""
-                QPushButton#groupButton {
-                    text-align: left;
-                    padding: 12px 16px;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 8px;
-                    background: #ffffff;
-                    color: #1e293b;
-                    font-weight: 500;
-                }
-                QPushButton#groupButton:hover {
-                    border: 1px solid #3b82f6;
-                    background: #f8fafc;
-                }
-                QPushButton#groupButton:checked {
-                    background: #3b82f6;
-                    color: white;
-                    border: 1px solid #3b82f6;
-                }
-            """)
             
             self.buttons.append(button)
             layout.addWidget(button)

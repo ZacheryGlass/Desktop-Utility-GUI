@@ -513,6 +513,17 @@ QPushButton#groupButton:checked {{
     color: {colors['text_on_primary']};
     border: 1px solid {colors['primary']};
 }}
+
+/* Enhanced Slider Value Label */
+QLabel#sliderValue {{
+    font-size: 12px;
+    font-weight: 600;
+    color: {colors['primary']};
+    padding: 4px 10px;
+    background: {colors['primary_lighter']};
+    border-radius: 8px;
+    border: 1px solid {colors['primary']};
+}}
 """
 
 # Default to light theme
