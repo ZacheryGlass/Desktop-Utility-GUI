@@ -30,33 +30,33 @@ COLORS = {
         'error_bg': '#fee2e2',          # Red-100
     },
     'dark': {
-        'primary': '#3b82f6',           # Blue-500
-        'primary_hover': '#60a5fa',     # Blue-400
-        'primary_pressed': '#2563eb',   # Blue-600
-        'primary_light': '#1e3a8a',     # Blue-800
-        'primary_lighter': '#1e293b',   # Slate-800
+        'primary': '#60a5fa',           # Blue-400 (brighter for dark mode)
+        'primary_hover': '#93c5fd',     # Blue-300
+        'primary_pressed': '#3b82f6',   # Blue-500
+        'primary_light': '#1e40af',     # Blue-800
+        'primary_lighter': '#312e81',   # Indigo-800
         
-        'background': '#0f172a',        # Slate-900
-        'background_secondary': '#1e293b', # Slate-800
-        'background_tertiary': '#334155',  # Slate-700
+        'background': '#111827',        # Gray-900 (true dark)
+        'background_secondary': '#1f2937', # Gray-800
+        'background_tertiary': '#374151',  # Gray-700
         
-        'surface': '#1e293b',           # Slate-800
-        'surface_hover': '#334155',     # Slate-700
-        'surface_border': '#475569',    # Slate-600
-        'surface_border_light': '#334155', # Slate-700
+        'surface': '#1f2937',           # Gray-800 (card backgrounds)
+        'surface_hover': '#374151',     # Gray-700
+        'surface_border': '#4b5563',    # Gray-600
+        'surface_border_light': '#374151', # Gray-700
         
-        'text_primary': '#f8fafc',      # Slate-50
-        'text_secondary': '#cbd5e1',    # Slate-300
-        'text_tertiary': '#94a3b8',     # Slate-400
-        'text_muted': '#64748b',        # Slate-500
-        'text_on_primary': '#ffffff',   # White
+        'text_primary': '#ffffff',      # Pure white for primary text
+        'text_secondary': '#d1d5db',    # Gray-300 (high contrast secondary)
+        'text_tertiary': '#9ca3af',     # Gray-400
+        'text_muted': '#6b7280',        # Gray-500
+        'text_on_primary': '#111827',   # Dark text on primary buttons
         
-        'success': '#10b981',           # Emerald-500
-        'success_bg': '#064e3b',        # Emerald-900
-        'warning': '#f59e0b',           # Amber-500
-        'warning_bg': '#78350f',        # Amber-900
-        'error': '#ef4444',             # Red-500
-        'error_bg': '#7f1d1d',          # Red-900
+        'success': '#34d399',           # Emerald-400 (brighter for dark)
+        'success_bg': '#065f46',        # Emerald-800
+        'warning': '#fbbf24',           # Amber-400 (brighter for dark)
+        'warning_bg': '#92400e',        # Amber-800
+        'error': '#f87171',             # Red-400 (brighter for dark)
+        'error_bg': '#991b1b',          # Red-800
     }
 }
 
@@ -188,8 +188,8 @@ QWidget#headerWidget {{
 QWidget#scriptWidget {{
     background: {colors['surface']};
     border: 1px solid {colors['surface_border']};
-    border-radius: 16px;
-    margin: 12px;
+    border-radius: 12px;
+    margin: 4px;
 }}
 
 QWidget#scriptWidget:hover {{

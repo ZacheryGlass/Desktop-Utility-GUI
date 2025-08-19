@@ -49,26 +49,14 @@ class ScriptWidget(QWidget):
     
     def init_ui(self):
         self.setObjectName("scriptWidget")
-        # Apply direct styling with visible borders matching header style
-        self.setStyleSheet("""
-            ScriptWidget {
-                background: rgba(255, 255, 255, 0.95);
-                border: 1px solid rgba(226, 232, 240, 0.8);
-                border-radius: 16px;
-                margin: 8px;
-            }
-            ScriptWidget:hover {
-                border: 1px solid rgba(59, 130, 246, 0.5);
-                background: rgba(255, 255, 255, 1.0);
-            }
-        """)
+        # Let theme manager handle styling - no hardcoded styles
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(140)
-        self.setMaximumHeight(160)
+        self.setMinimumHeight(100)
+        self.setMaximumHeight(120)
         
         main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(24, 20, 24, 20)
-        main_layout.setSpacing(24)
+        main_layout.setContentsMargins(20, 16, 20, 16)
+        main_layout.setSpacing(20)
         
         info_layout = QVBoxLayout()
         info_layout.setSpacing(8)

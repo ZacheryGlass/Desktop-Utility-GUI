@@ -43,7 +43,7 @@ class MainWindow(QMainWindow):
         logger.debug("Initializing UI components")
         self.setWindowTitle("Desktop Utilities")
         self.setGeometry(100, 100, 800, 900)
-        self.setStyleSheet(MAIN_STYLE)
+        # Don't set MAIN_STYLE here - let theme manager handle it
         logger.debug("Main window configured: 800x900 at position (100,100)")
         
         central_widget = QWidget()
@@ -91,11 +91,7 @@ class MainWindow(QMainWindow):
         self.theme_button.clicked.connect(self.toggle_theme)
         buttons_layout.addWidget(self.theme_button)
         
-        # Refresh button with icon
-        refresh_button = QPushButton("🔄 Refresh")
-        refresh_button.setObjectName("refreshButton")
-        refresh_button.clicked.connect(self.reload_scripts)
-        buttons_layout.addWidget(refresh_button)
+        # Refresh button removed for cleaner UI
         
         title_container.addLayout(buttons_layout)
         
@@ -110,8 +106,8 @@ class MainWindow(QMainWindow):
         self.script_list_widget = QWidget()
         self.script_list_widget.setObjectName("scriptListContainer")
         self.script_list_layout = QVBoxLayout(self.script_list_widget)
-        self.script_list_layout.setContentsMargins(24, 16, 24, 24)
-        self.script_list_layout.setSpacing(16)
+        self.script_list_layout.setContentsMargins(20, 12, 20, 20)
+        self.script_list_layout.setSpacing(8)
         
         self.scroll_area.setWidget(self.script_list_widget)
         main_layout.addWidget(self.scroll_area)
