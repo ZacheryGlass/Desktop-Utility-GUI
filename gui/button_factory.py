@@ -2,7 +2,7 @@ import logging
 from typing import Optional, Callable, Any
 from PyQt6.QtWidgets import (QPushButton, QComboBox, QSlider, QLineEdit,
                              QSpinBox, QDoubleSpinBox, QWidget, QHBoxLayout,
-                             QLabel)
+                             QLabel, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from core.button_types import (ButtonType, ButtonOptions, ToggleOptions, 
@@ -58,6 +58,8 @@ class ButtonFactory:
         if button_type == ButtonType.RUN:
             opts = options if isinstance(options, RunOptions) else RunOptions()
             button = QPushButton(opts.button_text)
+            button.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+            button.setMinimumHeight(60)
             button.clicked.connect(lambda: callback())
             logger.debug(f"Created RUN button with text: '{opts.button_text}'")
             return button

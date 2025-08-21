@@ -51,15 +51,15 @@ class ScriptWidget(QWidget):
         self.setObjectName("scriptWidget")
         # Let theme manager handle styling - no hardcoded styles
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(100)
-        self.setMaximumHeight(120)
+        self.setMinimumHeight(110)
+        self.setMaximumHeight(130)
         
         main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(20, 16, 20, 16)
-        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(20, 12, 20, 12)
+        main_layout.setSpacing(16)
         
         info_layout = QVBoxLayout()
-        info_layout.setSpacing(8)
+        info_layout.setSpacing(4)
         
         self.name_label = QLabel(self.metadata.get('name', 'Unnamed Script'))
         self.name_label.setObjectName("scriptName")
@@ -70,8 +70,7 @@ class ScriptWidget(QWidget):
         self.description_label.setWordWrap(True)
         info_layout.addWidget(self.description_label)
         
-        # Add some spacing before status
-        info_layout.addSpacing(6)
+        # Removed extra spacing for tighter layout
         
         self.status_label = QLabel("")
         self.status_label.setObjectName("scriptStatus")

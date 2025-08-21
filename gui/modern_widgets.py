@@ -30,6 +30,8 @@ class SegmentedControl(QWidget):
             button = QPushButton(option)
             button.setCheckable(True)
             button.setObjectName("segmentButton")
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            button.setMinimumHeight(60)
             button.clicked.connect(lambda checked, idx=i: self.on_segment_clicked(idx))
             
             # Style the first and last buttons with special border radius

@@ -188,7 +188,7 @@ QWidget#headerWidget {{
 QWidget#scriptWidget {{
     background: {colors['surface']};
     border: 1px solid {colors['surface_border']};
-    border-radius: 12px;
+    border-radius: 10px;
     margin: 4px;
 }}
 
@@ -198,28 +198,28 @@ QWidget#scriptWidget:hover {{
 }}
 
 QLabel#scriptName {{
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
     color: {colors['text_primary']};
     letter-spacing: -0.3px;
-    margin-bottom: 6px;
+    margin: 0px;
 }}
 
 QLabel#scriptDescription {{
-    font-size: 14px;
+    font-size: 13px;
     color: {colors['text_secondary']};
     font-weight: 400;
-    line-height: 1.5;
-    margin-bottom: 12px;
+    line-height: 1.4;
+    margin: 0px;
 }}
 
 QLabel#scriptStatus {{
-    font-size: 12px;
+    font-size: 11px;
     color: {colors['text_tertiary']};
     font-weight: 500;
-    padding: 6px 12px;
+    padding: 4px 10px;
     background: {colors['surface_border_light']};
-    border-radius: 8px;
+    border-radius: 6px;
     border: 1px solid {colors['surface_border']};
 }}
 
@@ -245,11 +245,11 @@ QPushButton {{
     background: {colors['primary']};
     color: {colors['text_on_primary']};
     border: none;
-    border-radius: 12px;
-    padding: 14px 24px;
+    border-radius: 10px;
+    padding: 12px 20px;
     font-size: 14px;
     font-weight: 600;
-    min-width: 140px;
+    min-width: 120px;
 }}
 
 QPushButton:hover {{
@@ -451,10 +451,10 @@ QPushButton#segmentButton {{
     background: {colors['surface']};
     color: {colors['text_secondary']};
     border: 1px solid {colors['surface_border']};
-    padding: 12px 16px;
-    font-size: 14px;
+    padding: 10px 14px;
+    font-size: 13px;
     font-weight: 500;
-    min-width: 80px;
+    min-width: 70px;
 }}
 
 QPushButton#segmentButton[position="single"] {{
