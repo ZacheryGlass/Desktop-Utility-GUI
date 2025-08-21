@@ -13,10 +13,6 @@ class SettingsManager(QObject):
             'start_minimized': True,
             'show_notification': True
         },
-        'appearance': {
-            'theme': 'dark',
-            'tray_icon_theme': 'auto'
-        },
         'window': {
             'geometry': None,
             'last_position': None
@@ -111,12 +107,6 @@ class SettingsManager(QObject):
     
     def is_close_to_tray(self) -> bool:
         return self.get('behavior/close_to_tray', True)
-    
-    def get_theme(self) -> str:
-        return self.get('appearance/theme', 'dark')
-    
-    def set_theme(self, theme: str) -> None:
-        self.set('appearance/theme', theme)
     
     def should_show_notifications(self) -> bool:
         return self.get('behavior/show_script_notifications', True)

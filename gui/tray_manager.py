@@ -60,17 +60,12 @@ class TrayManager(QObject):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
         # Draw a rounded rectangle background
-        theme = self.settings.get_theme()
-        if theme == 'dark':
-            painter.setBrush(QBrush(Qt.GlobalColor.darkGray))
-        else:
-            painter.setBrush(QBrush(Qt.GlobalColor.lightGray))
-        
+        painter.setBrush(QBrush(Qt.GlobalColor.lightGray))
         painter.setPen(QPen(Qt.GlobalColor.darkCyan, 2))
         painter.drawRoundedRect(4, 4, 56, 56, 10, 10)
         
         # Draw "DU" text
-        painter.setPen(QPen(Qt.GlobalColor.white if theme == 'dark' else Qt.GlobalColor.black, 2))
+        painter.setPen(QPen(Qt.GlobalColor.black, 2))
         font = painter.font()
         font.setPointSize(20)
         font.setBold(True)
@@ -106,12 +101,6 @@ class TrayManager(QObject):
         settings_action.triggered.connect(self.settings_requested.emit)
         self.context_menu.addAction(settings_action)
         
-        # Theme toggle
-        self.theme_action = QAction("Switch to Light Theme", self)
-        self.theme_action.triggered.connect(self._toggle_theme)
-        self._update_theme_action()
-        self.context_menu.addAction(self.theme_action)
-        
         self.context_menu.addSeparator()
         
         # Exit action
@@ -132,7 +121,7 @@ class TrayManager(QObject):
     
     def _rebuild_scripts_menu(self):
         # Clear only script actions from the main menu
-        # We need to preserve title, separators, settings, theme, and exit actions
+        # We need to preserve title, separators, settings, and exit actions
         self.script_actions.clear()
         self.script_menus.clear()
         
@@ -147,7 +136,7 @@ class TrayManager(QObject):
             if action.text() == "Desktop Utilities":
                 started_removing = True
                 continue
-            elif action.text() in ["Settings...", "Switch to Light Theme", "Switch to Dark Theme"]:
+            elif action.text() in ["Settings..."]:
                 started_removing = False
                 continue
             elif started_removing and not action.isSeparator():
@@ -163,11 +152,22 @@ class TrayManager(QObject):
                 menu.deleteLater()
         
         if not self.scripts:
-            # Insert "No scripts available" after first separator
+            # Insert "No scripts available" after title
             no_scripts_action = QAction("No scripts available", self)
             no_scripts_action.setEnabled(False)
-            if first_separator_index != -1 and first_separator_index + 1 < len(self.context_menu.actions()):
-                self.context_menu.insertAction(self.context_menu.actions()[first_separator_index + 1], no_scripts_action)
+            
+            # Find position after title and first separator
+            actions = self.context_menu.actions()
+            insert_position = None
+            for i, action in enumerate(actions):
+                if action.text() == "Desktop Utilities":
+                    # Look for separator after title
+                    if i + 1 < len(actions) and actions[i + 1].isSeparator():
+                        insert_position = actions[i + 2] if i + 2 < len(actions) else None
+                    break
+            
+            if insert_position:
+                self.context_menu.insertAction(insert_position, no_scripts_action)
             else:
                 self.context_menu.addAction(no_scripts_action)
             return
@@ -222,7 +222,7 @@ class TrayManager(QObject):
     def _insert_script_action(self, action_or_menu):
         """Insert a script action or menu into the context menu before the final separator"""
         actions = self.context_menu.actions()
-        # Find the last separator (before settings/theme/exit)
+        # Find the last separator (before settings/exit)
         last_separator_index = -1
         for i in range(len(actions) - 1, -1, -1):
             if actions[i].isSeparator():
@@ -597,20 +597,6 @@ class TrayManager(QObject):
             # Fallback to showing at tray icon position
             self.context_menu.popup(self.tray_icon.geometry().center())
     
-    
-    def _toggle_theme(self):
-        current_theme = self.settings.get_theme()
-        new_theme = 'light' if current_theme == 'dark' else 'dark'
-        self.settings.set_theme(new_theme)
-        self._update_theme_action()
-        self._create_tray_icon()  # Recreate icon with new theme
-    
-    def _update_theme_action(self):
-        current_theme = self.settings.get_theme()
-        if current_theme == 'dark':
-            self.theme_action.setText("Switch to Light Theme")
-        else:
-            self.theme_action.setText("Switch to Dark Theme")
     
     def show_notification(self, title: str, message: str, 
                          icon: QSystemTrayIcon.MessageIcon = QSystemTrayIcon.MessageIcon.Information):

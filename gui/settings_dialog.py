@@ -69,22 +69,6 @@ class SettingsDialog(QDialog):
         behavior_group.setLayout(behavior_layout)
         layout.addWidget(behavior_group)
         
-        # Appearance Settings Group
-        appearance_group = QGroupBox("Appearance")
-        appearance_layout = QVBoxLayout()
-        
-        theme_layout = QHBoxLayout()
-        theme_label = QLabel("Theme:")
-        theme_layout.addWidget(theme_label)
-        
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Dark", "Light"])
-        theme_layout.addWidget(self.theme_combo)
-        theme_layout.addStretch()
-        
-        appearance_layout.addLayout(theme_layout)
-        appearance_group.setLayout(appearance_layout)
-        layout.addWidget(appearance_group)
         
         # Add stretch to push buttons to bottom
         layout.addStretch()
@@ -117,9 +101,6 @@ class SettingsDialog(QDialog):
         self.single_instance_checkbox.setChecked(self.settings.get('behavior/single_instance', True))
         self.show_notifications_checkbox.setChecked(self.settings.should_show_notifications())
         
-        # Load appearance settings
-        current_theme = self.settings.get_theme()
-        self.theme_combo.setCurrentText(current_theme.capitalize())
     
     def apply_settings(self):
         try:
@@ -139,9 +120,6 @@ class SettingsDialog(QDialog):
             self.settings.set('behavior/single_instance', self.single_instance_checkbox.isChecked())
             self.settings.set('behavior/show_script_notifications', self.show_notifications_checkbox.isChecked())
             
-            # Save appearance settings
-            new_theme = self.theme_combo.currentText().lower()
-            self.settings.set_theme(new_theme)
             
             # Sync settings
             self.settings.sync()
