@@ -110,8 +110,9 @@ def main():
     # Don't quit when last window closes (we have tray icon)
     app.setQuitOnLastWindowClosed(False)
     
-    logger.info("Creating main window...")
+    logger.info("Creating main window (minimal, for settings dialog parent only)...")
     window = MainWindow()
+    window.hide()  # Always keep it hidden since we only use tray menu now
     
     logger.info("Creating system tray manager...")
     tray_manager = TrayManager(window)
@@ -119,15 +120,8 @@ def main():
     # Set script loader for tray manager
     tray_manager.set_script_loader(window.script_loader)
     
-    # Connect tray signals to window
-    tray_manager.show_window_requested.connect(window.show_from_tray)
-    tray_manager.show_window_bottom_right.connect(window.show_from_tray_bottom_right)
-    tray_manager.hide_window_requested.connect(window.hide)
+    # Connect settings request to window
     tray_manager.settings_requested.connect(window.open_settings)
-    
-    # Connect window signals to tray
-    window.minimize_to_tray_requested.connect(lambda: tray_manager.set_window_visible(False))
-    window.scripts_reloaded.connect(tray_manager.update_scripts)
     
     # Handle exit request
     def handle_exit():
@@ -137,25 +131,15 @@ def main():
     
     tray_manager.exit_requested.connect(handle_exit)
     
-    # Check startup mode
-    start_minimized = args.minimized or settings.is_start_minimized()
+    # Always start in tray-only mode (no window UI)
+    logger.info("Starting in system tray mode (no main window)")
     
-    if start_minimized:
-        logger.info("Starting minimized to system tray")
-        window.hide()
-        tray_manager.set_window_visible(False)
-        
-        # Show notification if enabled
-        if settings.get('startup/show_notification', True):
-            tray_manager.show_notification(
-                "Desktop Utilities",
-                "Application started in system tray. Click the tray icon to open."
-            )
-    else:
-        logger.info(f"Window geometry: {window.geometry().width()}x{window.geometry().height()}")
-        logger.info("Showing main window...")
-        window.show()
-        tray_manager.set_window_visible(True)
+    # Show notification if enabled and starting minimized
+    if (args.minimized or settings.is_start_minimized()) and settings.get('startup/show_notification', True):
+        tray_manager.show_notification(
+            "Desktop Utilities",
+            "Application started in system tray. Click the tray icon to access scripts."
+        )
     
     # Update startup registration if needed
     startup_manager = StartupManager()

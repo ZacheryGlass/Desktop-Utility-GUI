@@ -3,7 +3,22 @@ import logging
 from pathlib import Path
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication
-from .styles import get_theme_style, COLORS
+
+# Minimal theme support for settings dialog
+COLORS = {
+    'light': {
+        'background': '#ffffff',
+        'surface': '#f5f5f5',
+        'text': '#000000',
+        'primary': '#007acc'
+    },
+    'dark': {
+        'background': '#2d3142',
+        'surface': '#4f5b66',
+        'text': '#c5c8c6',
+        'primary': '#81c784'
+    }
+}
 
 logger = logging.getLogger('GUI.ThemeManager')
 
@@ -65,11 +80,24 @@ class ThemeManager(QObject):
     
     def apply_theme(self):
         """Apply the current theme to the application"""
+        # Minimal theming - only basic application-level styles needed
+        # Most theming now handled by native system tray menu
         app = QApplication.instance()
         if app:
-            style_sheet = get_theme_style(self.current_theme)
+            # Simple base styling for dialogs
+            colors = COLORS[self.current_theme]
+            style_sheet = f"""
+            QDialog {{
+                background-color: {colors['background']};
+                color: {colors['text']};
+            }}
+            QGroupBox {{
+                color: {colors['text']};
+                font-weight: bold;
+            }}
+            """
             app.setStyleSheet(style_sheet)
-            logger.debug(f"Applied {self.current_theme} theme stylesheet")
+            logger.debug(f"Applied minimal {self.current_theme} theme stylesheet")
     
     def get_theme_colors(self):
         """Get the current theme's color palette"""
