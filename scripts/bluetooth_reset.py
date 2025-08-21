@@ -7,22 +7,21 @@ sys.path.append('..')
 from core.base_script import UtilityScript
 from core.button_types import ButtonType, RunOptions
 
-class BluetoothReset(UtilityScript):
+class BluetoothToggle(UtilityScript):
     
     def __init__(self):
         super().__init__()
         self.service_name = "bthserv"
-        self.last_reset_time = None
     
     def get_metadata(self) -> Dict[str, Any]:
         return {
-            'name': 'Bluetooth Reset',
-            'description': 'Reset Bluetooth services and adapters to fix connectivity issues',
+            'name': 'Bluetooth Toggle',
+            'description': 'Toggle Bluetooth off for 10 seconds then back on',
             'button_type': ButtonType.RUN,
             'button_options': RunOptions(
-                button_text="Reset Bluetooth",
+                button_text="Toggle Bluetooth",
                 confirm_before_run=True,
-                confirm_message="This will temporarily disable Bluetooth and disconnect all devices. Continue?"
+                confirm_message="This will turn Bluetooth off for 10 seconds then back on. Continue?"
             )
         }
     
@@ -31,164 +30,131 @@ class BluetoothReset(UtilityScript):
             return 'Not available'
         
         try:
+            # Use PowerShell with WinRT API to check actual Bluetooth radio state
+            ps_script = '''
+            Add-Type -AssemblyName System.Runtime.WindowsRuntime
+            $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
+            Function Await($WinRtTask, $ResultType) {
+                $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
+                $netTask = $asTask.Invoke($null, @($WinRtTask))
+                $netTask.Wait(-1) | Out-Null
+                $netTask.Result
+            }
+            [Windows.Devices.Radios.Radio,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
+            [Windows.Devices.Radios.RadioAccessStatus,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
+            try {
+                $accessLevel = Await ([Windows.Devices.Radios.Radio]::RequestAccessAsync()) ([Windows.Devices.Radios.RadioAccessStatus])
+                if($accessLevel -eq "Allowed") {
+                    $radios = Await ([Windows.Devices.Radios.Radio]::GetRadiosAsync()) ([System.Collections.Generic.IReadOnlyList[Windows.Devices.Radios.Radio]])
+                    $bluetooth = $radios | Where-Object { $_.Kind -eq 'Bluetooth' }
+                    if($bluetooth) {
+                        if($bluetooth.State -eq 'On') { Write-Output "ON" } else { Write-Output "OFF" }
+                    } else { Write-Output "Not available" }
+                } else { Write-Output "Not available" }
+            } catch { Write-Output "OFF" }
+            '''
+            
             result = subprocess.run(
-                ['sc', 'query', self.service_name],
+                ['powershell', '-Command', ps_script],
                 capture_output=True,
                 text=True,
-                timeout=5,
+                timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             )
             
             if result.returncode == 0:
-                if 'RUNNING' in result.stdout:
-                    return 'Bluetooth service running'
-                elif 'STOPPED' in result.stdout:
-                    return 'Bluetooth service stopped'
-                else:
-                    return 'Bluetooth service status unknown'
+                status = result.stdout.strip()
+                return status if status in ['ON', 'OFF', 'Not available'] else 'OFF'
             else:
-                return 'Bluetooth service not found'
+                return 'OFF'
                 
-        except Exception as e:
-            return f'Error: {str(e)}'
+        except Exception:
+            return 'OFF'
     
     def execute(self) -> Dict[str, Any]:
         if sys.platform != 'win32':
             return {
                 'success': False,
-                'message': 'Bluetooth reset only supported on Windows'
+                'message': 'Bluetooth toggle only supported on Windows'
             }
         
         try:
-            steps_completed = []
-            
-            # Step 1: Stop Bluetooth Support Service
+            # Ensure Bluetooth service is running first
             try:
                 result = subprocess.run(
-                    ['net', 'stop', self.service_name],
+                    ['sc', 'query', self.service_name],
                     capture_output=True,
                     text=True,
-                    timeout=10,
-                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+                    timeout=5,
+                    creationflags=subprocess.CREATE_NO_WINDOW
                 )
-                if result.returncode == 0 or 'service is not started' in result.stdout.lower():
-                    steps_completed.append("Bluetooth service stopped")
-                else:
-                    steps_completed.append(f"Warning: Could not stop service - {result.stderr[:100]}")
-            except subprocess.TimeoutExpired:
-                steps_completed.append("Warning: Service stop timed out")
-            
-            # Step 2: Disable and re-enable Bluetooth adapters using PowerShell
-            try:
-                # Disable all Bluetooth adapters
-                disable_cmd = '''
-                Get-PnpDevice -Class Bluetooth | Where-Object {$_.Status -eq 'OK'} | ForEach-Object {
-                    Disable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false
-                }
-                '''
-                
-                result = subprocess.run(
-                    ['powershell', '-Command', disable_cmd],
-                    capture_output=True,
-                    text=True,
-                    timeout=15,
-                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-                )
-                
-                if result.returncode == 0:
-                    steps_completed.append("Bluetooth adapters disabled")
-                else:
-                    # Try alternative method using devcon if PowerShell fails
-                    steps_completed.append("Note: Could not disable adapters via PowerShell")
-                
-                # Wait a moment for devices to fully disable
-                time.sleep(2)
-                
-                # Re-enable all Bluetooth adapters
-                enable_cmd = '''
-                Get-PnpDevice -Class Bluetooth | Where-Object {$_.Status -ne 'OK'} | ForEach-Object {
-                    Enable-PnpDevice -InstanceId $_.InstanceId -Confirm:$false
-                }
-                '''
-                
-                result = subprocess.run(
-                    ['powershell', '-Command', enable_cmd],
-                    capture_output=True,
-                    text=True,
-                    timeout=15,
-                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-                )
-                
-                if result.returncode == 0:
-                    steps_completed.append("Bluetooth adapters re-enabled")
-                else:
-                    steps_completed.append("Note: Could not re-enable adapters via PowerShell")
-                    
-            except subprocess.TimeoutExpired:
-                steps_completed.append("Warning: Adapter reset timed out")
-            except Exception as e:
-                steps_completed.append(f"Warning: Adapter reset failed - {str(e)[:50]}")
-            
-            # Step 3: Restart Bluetooth Support Service
-            try:
-                result = subprocess.run(
-                    ['net', 'start', self.service_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-                )
-                if result.returncode == 0 or 'service was started successfully' in result.stdout.lower():
-                    steps_completed.append("Bluetooth service restarted")
-                else:
-                    steps_completed.append(f"Warning: Could not start service - {result.stderr[:100]}")
-            except subprocess.TimeoutExpired:
-                steps_completed.append("Warning: Service start timed out")
-            
-            # Step 4: Force Bluetooth discovery/scan
-            try:
-                # Use PowerShell to trigger Bluetooth discovery
-                scan_cmd = '''
-                Add-Type -AssemblyName System.Runtime.WindowsRuntime
-                $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | ? { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
-                [Windows.Devices.Enumeration.DeviceInformation,Windows.Devices.Enumeration,ContentType=WindowsRuntime] > $null
-                $deviceSelector = [Windows.Devices.Enumeration.DeviceInformation]::CreateWatcher()
-                $deviceSelector.Start()
-                Start-Sleep -Seconds 2
-                $deviceSelector.Stop()
-                '''
-                
-                result = subprocess.run(
-                    ['powershell', '-Command', scan_cmd],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-                )
-                
-                if result.returncode == 0:
-                    steps_completed.append("Bluetooth device scan triggered")
-                else:
-                    steps_completed.append("Note: Could not trigger device scan")
-                    
+                if result.returncode == 0 and 'STOPPED' in result.stdout:
+                    subprocess.run(
+                        ['net', 'start', self.service_name],
+                        capture_output=True,
+                        timeout=10,
+                        creationflags=subprocess.CREATE_NO_WINDOW
+                    )
             except:
-                steps_completed.append("Note: Device scan step skipped")
+                pass
             
-            # Wait for services to stabilize
-            time.sleep(2)
+            # PowerShell script to toggle Bluetooth off, wait, then on
+            ps_script = '''
+            Add-Type -AssemblyName System.Runtime.WindowsRuntime
+            $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
+            Function Await($WinRtTask, $ResultType) {
+                $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
+                $netTask = $asTask.Invoke($null, @($WinRtTask))
+                $netTask.Wait(-1) | Out-Null
+                $netTask.Result
+            }
+            [Windows.Devices.Radios.Radio,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
+            [Windows.Devices.Radios.RadioAccessStatus,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
+            [Windows.Devices.Radios.RadioState,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
             
-            self.last_reset_time = time.time()
+            try {
+                $accessLevel = Await ([Windows.Devices.Radios.Radio]::RequestAccessAsync()) ([Windows.Devices.Radios.RadioAccessStatus])
+                if($accessLevel -eq "Allowed") {
+                    $radios = Await ([Windows.Devices.Radios.Radio]::GetRadiosAsync()) ([System.Collections.Generic.IReadOnlyList[Windows.Devices.Radios.Radio]])
+                    $bluetooth = $radios | Where-Object { $_.Kind -eq 'Bluetooth' }
+                    if($bluetooth) {
+                        Write-Output "Turning Bluetooth OFF..."
+                        Await ($bluetooth.SetStateAsync("Off")) ([Windows.Devices.Radios.RadioAccessStatus]) | Out-Null
+                        Start-Sleep -Seconds 10
+                        Write-Output "Turning Bluetooth ON..."
+                        Await ($bluetooth.SetStateAsync("On")) ([Windows.Devices.Radios.RadioAccessStatus]) | Out-Null
+                        Write-Output "SUCCESS"
+                    } else {
+                        Write-Output "ERROR: No Bluetooth radio found"
+                    }
+                } else {
+                    Write-Output "ERROR: Radio access not allowed"
+                }
+            } catch {
+                Write-Output "ERROR: $($_.Exception.Message)"
+            }
+            '''
             
+            # Run the PowerShell script in the background using Popen
+            
+            process = subprocess.Popen(
+                ['powershell', '-Command', ps_script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+            )
+            
+            # Return immediately while the process runs in background
             return {
                 'success': True,
-                'message': f'Bluetooth reset completed. Steps: {", ".join(steps_completed)}',
-                'steps_completed': steps_completed
+                'message': 'Bluetooth toggle started (runs for 10 seconds in background)'
             }
-            
+                
         except Exception as e:
             return {
                 'success': False,
-                'message': f'Bluetooth reset failed: {str(e)}'
+                'message': f'Error starting Bluetooth toggle: {str(e)}'
             }
     
     def validate(self) -> bool:
