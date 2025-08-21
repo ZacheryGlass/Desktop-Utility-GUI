@@ -24,6 +24,7 @@ class TrayManager(QObject):
         self.script_loader = None
         self.scripts = []
         self.script_actions = {}
+        self.script_menus = {}  # Track submenus for CYCLE/SELECT scripts
         
         # Create tray icon
         self.tray_icon = QSystemTrayIcon(self)
@@ -133,26 +134,33 @@ class TrayManager(QObject):
         # Clear only script actions from the main menu
         # We need to preserve title, separators, settings, theme, and exit actions
         self.script_actions.clear()
+        self.script_menus.clear()
         
-        # Remove old script actions from context menu
-        # Find the position after the first separator (after title)
+        # Remove all script-related actions and menus from context menu
+        # Use a more robust approach: remove everything between title and settings
         actions = self.context_menu.actions()
-        first_separator_index = -1
-        second_separator_index = -1
+        actions_to_remove = []
         
-        for i, action in enumerate(actions):
-            if action.isSeparator():
-                if first_separator_index == -1:
-                    first_separator_index = i
-                elif second_separator_index == -1:
-                    second_separator_index = i
-                    break
+        # Find items to remove (between title and settings)
+        started_removing = False
+        for action in actions:
+            if action.text() == "Desktop Utilities":
+                started_removing = True
+                continue
+            elif action.text() in ["Settings...", "Switch to Light Theme", "Switch to Dark Theme"]:
+                started_removing = False
+                continue
+            elif started_removing and not action.isSeparator():
+                actions_to_remove.append(action)
         
-        # Remove script actions between first and second separators
-        if first_separator_index != -1 and second_separator_index != -1:
-            for i in range(second_separator_index - 1, first_separator_index, -1):
-                if i < len(actions):
-                    self.context_menu.removeAction(actions[i])
+        # Remove the identified actions
+        for action in actions_to_remove:
+            self.context_menu.removeAction(action)
+            
+        # Also remove any orphaned submenus
+        for menu in self.context_menu.findChildren(QMenu):
+            if menu not in [self.context_menu]:  # Don't remove the main context menu
+                menu.deleteLater()
         
         if not self.scripts:
             # Insert "No scripts available" after first separator
@@ -283,6 +291,8 @@ class TrayManager(QObject):
             self.script_actions[option_action] = script
             submenu.addAction(option_action)
         
+        # Store the submenu for status updates
+        self.script_menus[script] = submenu
         self._insert_script_action(submenu)
     
     def _add_select_script(self, script: UtilityScript, script_name: str, metadata: dict):
@@ -317,6 +327,8 @@ class TrayManager(QObject):
             self.script_actions[option_action] = script
             submenu.addAction(option_action)
         
+        # Store the submenu for status updates
+        self.script_menus[script] = submenu
         self._insert_script_action(submenu)
     
     def _add_number_script(self, script: UtilityScript, script_name: str, metadata: dict):
@@ -509,10 +521,61 @@ class TrayManager(QObject):
     
     def _update_script_statuses(self):
         """Update script status display in menu items"""
-        # Rebuild entire menu to ensure proper status updates
-        # This is simpler than trying to update individual items
-        # given the different types of menu structures (submenus, etc.)
-        self._rebuild_scripts_menu()
+        logger.debug(f"Updating status for {len(self.script_actions)} script actions and {len(self.script_menus)} script menus")
+        
+        # Track which scripts we've already processed to avoid duplicates
+        processed_scripts = set()
+        
+        # Update CYCLE and SELECT scripts via their submenus
+        for script, submenu in self.script_menus.items():
+            if script in processed_scripts:
+                continue
+            processed_scripts.add(script)
+            
+            try:
+                current_status = script.get_status()
+                for menu_action in submenu.actions():
+                    option_text = menu_action.text()
+                    if current_status and (option_text.lower() in current_status.lower() or 
+                                         current_status.lower() in option_text.lower()):
+                        menu_action.setChecked(True)
+                    else:
+                        menu_action.setChecked(False)
+            except Exception as e:
+                logger.error(f"Error updating submenu status for script: {e}")
+        
+        # Update other script types (RUN, TOGGLE, NUMBER, TEXT_INPUT)
+        for action, script in self.script_actions.items():
+            if script in processed_scripts:
+                continue  # Skip CYCLE/SELECT scripts already processed above
+                
+            try:
+                metadata = script.get_metadata()
+                script_name = metadata.get('name', 'Unknown Script')
+                button_type = metadata.get('button_type', ButtonType.RUN)
+                
+                # Update action text based on script type
+                if button_type == ButtonType.TOGGLE:
+                    status = script.get_status()
+                    is_on = status and status.lower() in ['on', 'enabled', 'true', 'active']
+                    state_text = "ON" if is_on else "OFF"
+                    action.setText(f"{script_name} [{state_text}]")
+                    processed_scripts.add(script)
+                    
+                elif button_type in [ButtonType.RUN, ButtonType.NUMBER, ButtonType.TEXT_INPUT]:
+                    # For these scripts, show current status if available
+                    try:
+                        status = script.get_status_display()
+                        if status and status != 'Unknown':
+                            action.setText(f"{script_name} [{status}]")
+                        else:
+                            action.setText(script_name)
+                    except:
+                        action.setText(script_name)
+                    processed_scripts.add(script)
+                        
+            except Exception as e:
+                logger.error(f"Error updating status for script action: {e}")
     
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
