@@ -89,24 +89,10 @@ class TrayManager(QObject):
         
         self.context_menu.addSeparator()
         
-        # Scripts will be added dynamically directly to main menu
-        # (no longer in a submenu since this IS the main interface now)
+        # Scripts will be added dynamically here
+        # (Scripts area - populated by _rebuild_scripts_menu)
         
-        # Placeholder for scripts - will be populated by _rebuild_scripts_menu
-        
-        self.context_menu.addSeparator()
-        
-        # Settings action
-        settings_action = QAction("Settings...", self)
-        settings_action.triggered.connect(self.settings_requested.emit)
-        self.context_menu.addAction(settings_action)
-        
-        self.context_menu.addSeparator()
-        
-        # Exit action
-        exit_action = QAction("Exit", self)
-        exit_action.triggered.connect(self.exit_requested.emit)
-        self.context_menu.addAction(exit_action)
+        # Settings and Exit will be added at the end by _rebuild_scripts_menu
     
     def set_script_loader(self, script_loader: ScriptLoader):
         self.script_loader = script_loader
@@ -120,86 +106,78 @@ class TrayManager(QObject):
         self._rebuild_scripts_menu()
     
     def _rebuild_scripts_menu(self):
-        # Clear only script actions from the main menu
-        # We need to preserve title, separators, settings, and exit actions
+        # Clear everything except title and first separator
         self.script_actions.clear()
         self.script_menus.clear()
         
-        # Remove all script-related actions and menus from context menu
-        # Use a more robust approach: remove everything between title and settings
+        # Remove all actions except title and first separator
         actions = self.context_menu.actions()
-        actions_to_remove = []
+        actions_to_keep = []
         
-        # Find items to remove (between title and settings)
-        started_removing = False
-        for action in actions:
+        # Keep title and first separator
+        for i, action in enumerate(actions):
             if action.text() == "Desktop Utilities":
-                started_removing = True
-                continue
-            elif action.text() in ["Settings..."]:
-                started_removing = False
-                continue
-            elif started_removing and not action.isSeparator():
-                actions_to_remove.append(action)
+                actions_to_keep.append(action)
+                # Also keep the separator right after title
+                if i + 1 < len(actions) and actions[i + 1].isSeparator():
+                    actions_to_keep.append(actions[i + 1])
+                break
         
-        # Remove the identified actions
-        for action in actions_to_remove:
-            self.context_menu.removeAction(action)
-            
-        # Also remove any orphaned submenus
+        # Remove all other actions
+        for action in actions:
+            if action not in actions_to_keep:
+                self.context_menu.removeAction(action)
+        
+        # Clean up any orphaned submenus
         for menu in self.context_menu.findChildren(QMenu):
-            if menu not in [self.context_menu]:  # Don't remove the main context menu
+            if menu != self.context_menu:
                 menu.deleteLater()
         
+        # Add scripts
         if not self.scripts:
-            # Insert "No scripts available" after title
             no_scripts_action = QAction("No scripts available", self)
             no_scripts_action.setEnabled(False)
-            
-            # Find position after title and first separator
-            actions = self.context_menu.actions()
-            insert_position = None
-            for i, action in enumerate(actions):
-                if action.text() == "Desktop Utilities":
-                    # Look for separator after title
-                    if i + 1 < len(actions) and actions[i + 1].isSeparator():
-                        insert_position = actions[i + 2] if i + 2 < len(actions) else None
-                    break
-            
-            if insert_position:
-                self.context_menu.insertAction(insert_position, no_scripts_action)
-            else:
-                self.context_menu.addAction(no_scripts_action)
-            return
-        
-        for script in self.scripts:
-            try:
-                metadata = script.get_metadata()
-                script_name = metadata.get('name', 'Unknown Script')
-                button_type = metadata.get('button_type', ButtonType.RUN)
-                
-                if button_type == ButtonType.RUN:
-                    self._add_run_script(script, script_name, metadata)
-                elif button_type == ButtonType.TOGGLE:
-                    self._add_toggle_script(script, script_name, metadata)
-                elif button_type == ButtonType.CYCLE:
-                    self._add_cycle_script(script, script_name, metadata)
-                elif button_type == ButtonType.SELECT:
-                    self._add_select_script(script, script_name, metadata)
-                elif button_type == ButtonType.NUMBER:
-                    self._add_number_script(script, script_name, metadata)
-                elif button_type == ButtonType.TEXT_INPUT:
-                    self._add_text_input_script(script, script_name, metadata)
-                elif button_type == ButtonType.SLIDER:
-                    # Deprecate slider scripts as requested
-                    logger.info(f"Skipping deprecated SLIDER script: {script_name}")
-                    continue
-                else:
-                    # Default to RUN behavior for unknown types
-                    self._add_run_script(script, script_name, metadata)
+            self.context_menu.addAction(no_scripts_action)
+        else:
+            for script in self.scripts:
+                try:
+                    metadata = script.get_metadata()
+                    script_name = metadata.get('name', 'Unknown Script')
+                    button_type = metadata.get('button_type', ButtonType.RUN)
                     
-            except Exception as e:
-                logger.error(f"Error adding script to tray menu: {e}")
+                    if button_type == ButtonType.RUN:
+                        self._add_run_script(script, script_name, metadata)
+                    elif button_type == ButtonType.TOGGLE:
+                        self._add_toggle_script(script, script_name, metadata)
+                    elif button_type == ButtonType.CYCLE:
+                        self._add_cycle_script(script, script_name, metadata)
+                    elif button_type == ButtonType.SELECT:
+                        self._add_select_script(script, script_name, metadata)
+                    elif button_type == ButtonType.NUMBER:
+                        self._add_number_script(script, script_name, metadata)
+                    elif button_type == ButtonType.TEXT_INPUT:
+                        self._add_text_input_script(script, script_name, metadata)
+                    elif button_type == ButtonType.SLIDER:
+                        logger.info(f"Skipping deprecated SLIDER script: {script_name}")
+                        continue
+                    else:
+                        self._add_run_script(script, script_name, metadata)
+                        
+                except Exception as e:
+                    logger.error(f"Error adding script to tray menu: {e}")
+        
+        # Add final menu structure: Separator -> Settings -> Separator -> Exit
+        self.context_menu.addSeparator()
+        
+        settings_action = QAction("Settings...", self)
+        settings_action.triggered.connect(self.settings_requested.emit)
+        self.context_menu.addAction(settings_action)
+        
+        self.context_menu.addSeparator()
+        
+        exit_action = QAction("Exit", self)
+        exit_action.triggered.connect(self.exit_requested.emit)
+        self.context_menu.addAction(exit_action)
     
     def _add_run_script(self, script: UtilityScript, script_name: str, metadata: dict):
         """Add a simple RUN script as a menu item"""
@@ -217,30 +195,7 @@ class TrayManager(QObject):
         action.triggered.connect(lambda checked, s=script: self._execute_script(s))
         
         self.script_actions[action] = script
-        self._insert_script_action(action)
-    
-    def _insert_script_action(self, action_or_menu):
-        """Insert a script action or menu into the context menu before the final separator"""
-        actions = self.context_menu.actions()
-        # Find the last separator (before settings/exit)
-        last_separator_index = -1
-        for i in range(len(actions) - 1, -1, -1):
-            if actions[i].isSeparator():
-                last_separator_index = i
-                break
-        
-        if last_separator_index != -1:
-            # Insert before the last separator
-            if hasattr(action_or_menu, 'menuAction'):  # It's a QMenu
-                self.context_menu.insertMenu(actions[last_separator_index], action_or_menu)
-            else:  # It's a QAction
-                self.context_menu.insertAction(actions[last_separator_index], action_or_menu)
-        else:
-            # Fallback: add to the end
-            if hasattr(action_or_menu, 'menuAction'):  # It's a QMenu
-                self.context_menu.addMenu(action_or_menu)
-            else:  # It's a QAction
-                self.context_menu.addAction(action_or_menu)
+        self.context_menu.addAction(action)
     
     def _add_toggle_script(self, script: UtilityScript, script_name: str, metadata: dict):
         """Add a TOGGLE script as a menu item showing current state"""
@@ -257,7 +212,7 @@ class TrayManager(QObject):
         action.triggered.connect(lambda checked, s=script: self._execute_toggle_script(s))
         
         self.script_actions[action] = script
-        self._insert_script_action(action)
+        self.context_menu.addAction(action)
     
     def _add_cycle_script(self, script: UtilityScript, script_name: str, metadata: dict):
         """Add a CYCLE script as a submenu with all options"""
@@ -293,7 +248,7 @@ class TrayManager(QObject):
         
         # Store the submenu for status updates
         self.script_menus[script] = submenu
-        self._insert_script_action(submenu)
+        self.context_menu.addMenu(submenu)
     
     def _add_select_script(self, script: UtilityScript, script_name: str, metadata: dict):
         """Add a SELECT script as a submenu with all options"""
@@ -329,7 +284,7 @@ class TrayManager(QObject):
         
         # Store the submenu for status updates
         self.script_menus[script] = submenu
-        self._insert_script_action(submenu)
+        self.context_menu.addMenu(submenu)
     
     def _add_number_script(self, script: UtilityScript, script_name: str, metadata: dict):
         """Add a NUMBER script that shows input dialog when clicked"""
@@ -347,7 +302,7 @@ class TrayManager(QObject):
         action.triggered.connect(lambda checked, s=script: self._execute_number_script(s, metadata))
         
         self.script_actions[action] = script
-        self._insert_script_action(action)
+        self.context_menu.addAction(action)
     
     def _add_text_input_script(self, script: UtilityScript, script_name: str, metadata: dict):
         """Add a TEXT_INPUT script that shows input dialog when clicked"""
@@ -365,7 +320,7 @@ class TrayManager(QObject):
         action.triggered.connect(lambda checked, s=script: self._execute_text_input_script(s, metadata))
         
         self.script_actions[action] = script
-        self._insert_script_action(action)
+        self.context_menu.addAction(action)
     
     def _execute_script(self, script: UtilityScript, *args, **kwargs):
         try:
