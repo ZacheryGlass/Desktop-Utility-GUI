@@ -86,7 +86,7 @@ class DisplayToggle(UtilityScript):
         """Return the current display mode from saved state."""
         return self.current_mode
     
-    def execute(self) -> Dict[str, Any]:
+    def execute(self, *args, **kwargs) -> Dict[str, Any]:
         """Toggle between Extend and Duplicate modes."""
         try:
             # Toggle to the other mode
