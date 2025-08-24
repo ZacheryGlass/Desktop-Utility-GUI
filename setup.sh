@@ -41,7 +41,75 @@ fi
 echo
 echo "========================="
 echo "Setup completed successfully!"
+echo "========================="
 echo
+
+# Ask about startup (Linux/Mac)
+echo "Would you like to run Desktop Utility GUI automatically when your system starts?"
+read -p "Enter Y for Yes, N for No (default: N): " startup_choice
+
+if [[ "$startup_choice" =~ ^[Yy]$ ]]; then
+    echo
+    echo "Setting up automatic startup..."
+    
+    # Activate virtual environment and try to enable startup
+    source venv/bin/activate
+    
+    # Check the operating system
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Linux - create desktop entry for autostart
+        mkdir -p ~/.config/autostart
+        cat > ~/.config/autostart/desktop-utility-gui.desktop << EOF
+[Desktop Entry]
+Type=Application
+Name=Desktop Utility GUI
+Exec=$(pwd)/run.sh --minimized
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Comment=Desktop Utility GUI Application
+EOF
+        echo "Desktop Utility GUI will now start automatically on Linux login."
+        echo "You can disable this by removing ~/.config/autostart/desktop-utility-gui.desktop"
+        
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS - create LaunchAgent
+        mkdir -p ~/Library/LaunchAgents
+        cat > ~/Library/LaunchAgents/com.desktop-utility-gui.plist << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.desktop-utility-gui</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$(pwd)/run.sh</string>
+        <string>--minimized</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>/tmp/desktop-utility-gui.err</string>
+    <key>StandardOutPath</key>
+    <string>/tmp/desktop-utility-gui.out</string>
+</dict>
+</plist>
+EOF
+        launchctl load ~/Library/LaunchAgents/com.desktop-utility-gui.plist 2>/dev/null
+        echo "Desktop Utility GUI will now start automatically on macOS login."
+        echo "You can disable this with: launchctl unload ~/Library/LaunchAgents/com.desktop-utility-gui.plist"
+    else
+        echo "Note: Automatic startup configuration not available for this OS."
+        echo "You can manually add $(pwd)/run.sh to your system's startup applications."
+    fi
+else
+    echo
+    echo "Automatic startup not enabled. You can configure it later if needed."
+fi
+
+echo
+echo "========================="
 echo "To run the application:"
 echo "  1. Run: source venv/bin/activate"
 echo "  2. Run: python main.py"

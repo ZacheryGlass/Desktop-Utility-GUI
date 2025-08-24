@@ -44,7 +44,35 @@ if %errorlevel% neq 0 (
 echo.
 echo =========================
 echo Setup completed successfully!
+echo =========================
 echo.
+
+REM Ask about startup
+echo Would you like to run Desktop Utility GUI automatically when Windows starts?
+set /p startup_choice="Enter Y for Yes, N for No (default: N): "
+
+if /i "%startup_choice%"=="Y" (
+    echo.
+    echo Setting up automatic startup...
+    
+    REM Create a simple Python script to enable startup
+    call venv\Scripts\activate.bat
+    python -c "from core.startup_manager import StartupManager; sm = StartupManager('Desktop Utility GUI'); sm.enable(); print('Startup enabled successfully!')" 2>nul
+    
+    if %errorlevel% equ 0 (
+        echo Desktop Utility GUI will now start automatically with Windows.
+        echo You can disable this later in the application settings.
+    ) else (
+        echo Note: Could not enable automatic startup at this time.
+        echo You can enable it later from the application settings.
+    )
+) else (
+    echo.
+    echo Automatic startup not enabled. You can enable it later in the application settings.
+)
+
+echo.
+echo =========================
 echo To run the application:
 echo   1. Run: venv\Scripts\activate.bat
 echo   2. Run: python main.py
