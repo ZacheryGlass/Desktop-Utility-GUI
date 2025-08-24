@@ -200,13 +200,11 @@ class TrayManager(QObject):
     
     def _add_run_script(self, script: UtilityScript, script_name: str, metadata: dict):
         """Add a simple RUN script as a menu item"""
-        try:
-            status = script.get_status_display()
-            if status and status != 'Unknown':
-                display_name = f"{script_name} [{status}]"
-            else:
-                display_name = script_name
-        except:
+        # Get hotkey for this script instead of status
+        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        if hotkey:
+            display_name = f"{script_name} ({hotkey})"
+        else:
             display_name = script_name
         
         action = QAction(display_name, self)
@@ -218,13 +216,12 @@ class TrayManager(QObject):
     
     def _add_toggle_script(self, script: UtilityScript, script_name: str, metadata: dict):
         """Add a TOGGLE script as a menu item showing current state"""
-        try:
-            status = script.get_status()
-            is_on = status and status.lower() in ['on', 'enabled', 'true', 'active']
-            state_text = "ON" if is_on else "OFF"
-            display_name = f"{script_name} [{state_text}]"
-        except:
-            display_name = f"{script_name} [Unknown]"
+        # Get hotkey for this script instead of status
+        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        if hotkey:
+            display_name = f"{script_name} ({hotkey})"
+        else:
+            display_name = script_name
         
         action = QAction(display_name, self)
         action.setToolTip(f"{metadata.get('description', '')} (Click to toggle)")
@@ -241,8 +238,10 @@ class TrayManager(QObject):
             self._add_run_script(script, script_name, metadata)
             return
         
-        # Create submenu for cycle options
-        submenu = QMenu(script_name, self.context_menu)
+        # Create submenu for cycle options - include hotkey in submenu title
+        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        submenu_title = f"{script_name} ({hotkey})" if hotkey else script_name
+        submenu = QMenu(submenu_title, self.context_menu)
         
         try:
             current_status = script.get_status()
@@ -277,8 +276,10 @@ class TrayManager(QObject):
             self._add_run_script(script, script_name, metadata)
             return
         
-        # Create submenu for select options
-        submenu = QMenu(script_name, self.context_menu)
+        # Create submenu for select options - include hotkey in submenu title
+        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        submenu_title = f"{script_name} ({hotkey})" if hotkey else script_name
+        submenu = QMenu(submenu_title, self.context_menu)
         
         try:
             current_status = script.get_status()
@@ -307,13 +308,11 @@ class TrayManager(QObject):
     
     def _add_number_script(self, script: UtilityScript, script_name: str, metadata: dict):
         """Add a NUMBER script that shows input dialog when clicked"""
-        try:
-            status = script.get_status_display()
-            if status and status != 'Unknown':
-                display_name = f"{script_name} [{status}]"
-            else:
-                display_name = script_name
-        except:
+        # Get hotkey for this script instead of status
+        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        if hotkey:
+            display_name = f"{script_name} ({hotkey})"
+        else:
             display_name = script_name
         
         action = QAction(display_name, self)
@@ -325,13 +324,11 @@ class TrayManager(QObject):
     
     def _add_text_input_script(self, script: UtilityScript, script_name: str, metadata: dict):
         """Add a TEXT_INPUT script that shows input dialog when clicked"""
-        try:
-            status = script.get_status_display()
-            if status and status != 'Unknown':
-                display_name = f"{script_name} [{status}]"
-            else:
-                display_name = script_name
-        except:
+        # Get hotkey for this script instead of status
+        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        if hotkey:
+            display_name = f"{script_name} ({hotkey})"
+        else:
             display_name = script_name
         
         action = QAction(display_name, self)
@@ -507,6 +504,14 @@ class TrayManager(QObject):
             processed_scripts.add(script)
             
             try:
+                # Update submenu title to show hotkey
+                metadata = script.get_metadata()
+                script_name = metadata.get('name', 'Unknown Script')
+                hotkey = self.hotkey_registry.get_hotkey(script_name)
+                submenu_title = f"{script_name} ({hotkey})" if hotkey else script_name
+                submenu.setTitle(submenu_title)
+                
+                # Update option checkmarks based on current status
                 current_status = script.get_status()
                 for menu_action in submenu.actions():
                     option_text = menu_action.text()
@@ -528,25 +533,13 @@ class TrayManager(QObject):
                 script_name = metadata.get('name', 'Unknown Script')
                 button_type = metadata.get('button_type', ButtonType.RUN)
                 
-                # Update action text based on script type
-                if button_type == ButtonType.TOGGLE:
-                    status = script.get_status()
-                    is_on = status and status.lower() in ['on', 'enabled', 'true', 'active']
-                    state_text = "ON" if is_on else "OFF"
-                    action.setText(f"{script_name} [{state_text}]")
-                    processed_scripts.add(script)
-                    
-                elif button_type in [ButtonType.RUN, ButtonType.NUMBER, ButtonType.TEXT_INPUT]:
-                    # For these scripts, show current status if available
-                    try:
-                        status = script.get_status_display()
-                        if status and status != 'Unknown':
-                            action.setText(f"{script_name} [{status}]")
-                        else:
-                            action.setText(script_name)
-                    except:
-                        action.setText(script_name)
-                    processed_scripts.add(script)
+                # Update action text to show hotkey instead of status
+                hotkey = self.hotkey_registry.get_hotkey(script_name)
+                if hotkey:
+                    action.setText(f"{script_name} ({hotkey})")
+                else:
+                    action.setText(script_name)
+                processed_scripts.add(script)
                         
             except Exception as e:
                 logger.error(f"Error updating status for script action: {e}")
