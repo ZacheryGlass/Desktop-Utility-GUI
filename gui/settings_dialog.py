@@ -1,30 +1,68 @@
 import logging
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox,
                              QCheckBox, QComboBox, QLabel, QPushButton,
-                             QDialogButtonBox, QMessageBox, QWidget)
+                             QDialogButtonBox, QMessageBox, QWidget, QTabWidget,
+                             QTableWidget, QTableWidgetItem, QHeaderView,
+                             QAbstractItemView)
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from core.settings import SettingsManager
 from core.startup_manager import StartupManager
+from core.script_loader import ScriptLoader
+from core.hotkey_registry import HotkeyRegistry
+from gui.hotkey_configurator import HotkeyConfigDialog
 
 logger = logging.getLogger('GUI.SettingsDialog')
 
 class SettingsDialog(QDialog):
     settings_changed = pyqtSignal()
+    hotkeys_changed = pyqtSignal()
     
-    def __init__(self, parent=None):
+    def __init__(self, script_loader: ScriptLoader = None, parent=None):
         super().__init__(parent)
         self.settings = SettingsManager()
         self.startup_manager = StartupManager()
+        self.script_loader = script_loader
+        self.hotkey_registry = HotkeyRegistry(self.settings)
         self.init_ui()
         self.load_settings()
         
     def init_ui(self):
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.setMinimumWidth(400)
+        self.setMinimumSize(600, 500)
         
         layout = QVBoxLayout(self)
+        
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        layout.addWidget(self.tab_widget)
+        
+        # Create and add General tab
+        self.general_tab = self._create_general_tab()
+        self.tab_widget.addTab(self.general_tab, "General")
+        
+        # Create and add Hotkeys tab
+        self.hotkeys_tab = self._create_hotkeys_tab()
+        self.tab_widget.addTab(self.hotkeys_tab, "Hotkeys")
+        
+        # Dialog buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | 
+            QDialogButtonBox.StandardButton.Cancel |
+            QDialogButtonBox.StandardButton.Apply
+        )
+        
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        button_box.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.apply_settings)
+        
+        layout.addWidget(button_box)
+    
+    def _create_general_tab(self) -> QWidget:
+        """Create the General settings tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
         layout.setSpacing(12)
         
         # Startup Settings Group
@@ -69,25 +107,54 @@ class SettingsDialog(QDialog):
         behavior_group.setLayout(behavior_layout)
         layout.addWidget(behavior_group)
         
-        
-        # Add stretch to push buttons to bottom
+        # Add stretch to push content to top
         layout.addStretch()
-        
-        # Dialog buttons
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | 
-            QDialogButtonBox.StandardButton.Cancel |
-            QDialogButtonBox.StandardButton.Apply
-        )
-        
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.apply_settings)
-        
-        layout.addWidget(button_box)
         
         # Connect change handlers
         self.run_on_startup_checkbox.stateChanged.connect(self._on_startup_changed)
+        
+        return widget
+    
+    def _create_hotkeys_tab(self) -> QWidget:
+        """Create the Hotkeys configuration tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Instructions
+        instructions = QLabel(
+            "Configure keyboard shortcuts for scripts. Click on a hotkey cell to set or change it."
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        
+        # Create table for hotkey configuration
+        self.hotkeys_table = QTableWidget()
+        self.hotkeys_table.setColumnCount(4)
+        self.hotkeys_table.setHorizontalHeaderLabels(["Script", "Description", "Hotkey", "Actions"])
+        
+        # Configure table
+        self.hotkeys_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.hotkeys_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.hotkeys_table.horizontalHeader().setStretchLastSection(False)
+        self.hotkeys_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.hotkeys_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.hotkeys_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.hotkeys_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        
+        # Connect cell click handler
+        self.hotkeys_table.cellClicked.connect(self._on_hotkey_cell_clicked)
+        
+        layout.addWidget(self.hotkeys_table)
+        
+        # Refresh button
+        refresh_button = QPushButton("Refresh Scripts")
+        refresh_button.clicked.connect(self._refresh_hotkeys_table)
+        layout.addWidget(refresh_button)
+        
+        # Load hotkeys
+        self._refresh_hotkeys_table()
+        
+        return widget
     
     def load_settings(self):
         # Load startup settings
@@ -141,3 +208,121 @@ class SettingsDialog(QDialog):
         # Enable/disable "start minimized" when startup is toggled
         self.start_minimized_checkbox.setEnabled(state == Qt.CheckState.Checked.value)
         self.show_startup_notification.setEnabled(state == Qt.CheckState.Checked.value)
+    
+    def _refresh_hotkeys_table(self):
+        """Refresh the hotkeys table with current scripts"""
+        self.hotkeys_table.setRowCount(0)
+        
+        if not self.script_loader:
+            return
+        
+        # Get all scripts
+        scripts = self.script_loader.discover_scripts()
+        
+        # Populate table
+        for script in scripts:
+            try:
+                metadata = script.get_metadata()
+                script_name = metadata.get('name', 'Unknown')
+                description = metadata.get('description', '')
+                
+                # Get current hotkey for this script
+                hotkey = self.hotkey_registry.get_hotkey(script_name)
+                
+                # Add row
+                row_position = self.hotkeys_table.rowCount()
+                self.hotkeys_table.insertRow(row_position)
+                
+                # Script name
+                name_item = QTableWidgetItem(script_name)
+                name_item.setData(Qt.ItemDataRole.UserRole, script)  # Store script reference
+                self.hotkeys_table.setItem(row_position, 0, name_item)
+                
+                # Description
+                desc_item = QTableWidgetItem(description)
+                desc_item.setToolTip(description)
+                self.hotkeys_table.setItem(row_position, 1, desc_item)
+                
+                # Hotkey
+                hotkey_item = QTableWidgetItem(hotkey if hotkey else "(empty)")
+                if not hotkey:
+                    hotkey_item.setForeground(Qt.GlobalColor.gray)
+                self.hotkeys_table.setItem(row_position, 2, hotkey_item)
+                
+                # Clear button
+                clear_button = QPushButton("Clear")
+                clear_button.setMaximumWidth(60)
+                clear_button.clicked.connect(lambda checked, row=row_position: self._clear_hotkey(row))
+                self.hotkeys_table.setCellWidget(row_position, 3, clear_button)
+                
+            except Exception as e:
+                logger.error(f"Error adding script to hotkeys table: {e}")
+    
+    def _on_hotkey_cell_clicked(self, row: int, column: int):
+        """Handle clicks on hotkey cells"""
+        if column != 2:  # Only handle clicks on hotkey column
+            return
+        
+        # Get script info
+        name_item = self.hotkeys_table.item(row, 0)
+        if not name_item:
+            return
+        
+        script_name = name_item.text()
+        current_hotkey = self.hotkey_registry.get_hotkey(script_name)
+        
+        # Show hotkey configuration dialog
+        dialog = HotkeyConfigDialog(script_name, current_hotkey, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_hotkey = dialog.get_hotkey()
+            
+            if new_hotkey != current_hotkey:
+                # Check for conflicts
+                conflict = self.hotkey_registry.get_hotkey_conflicts(new_hotkey, script_name)
+                if conflict:
+                    QMessageBox.warning(
+                        self, 
+                        "Hotkey Conflict",
+                        f"The hotkey {new_hotkey} is already assigned to {conflict}."
+                    )
+                    return
+                
+                # Update hotkey
+                if new_hotkey:
+                    success, error = self.hotkey_registry.add_hotkey(script_name, new_hotkey)
+                    if not success:
+                        QMessageBox.warning(self, "Error", error)
+                        return
+                else:
+                    self.hotkey_registry.remove_hotkey(script_name)
+                
+                # Update table display
+                hotkey_item = self.hotkeys_table.item(row, 2)
+                if hotkey_item:
+                    hotkey_item.setText(new_hotkey if new_hotkey else "(empty)")
+                    hotkey_item.setForeground(
+                        Qt.GlobalColor.black if new_hotkey else Qt.GlobalColor.gray
+                    )
+                
+                # Mark that hotkeys have changed
+                self.hotkeys_changed.emit()
+    
+    def _clear_hotkey(self, row: int):
+        """Clear the hotkey for a script"""
+        # Get script info
+        name_item = self.hotkeys_table.item(row, 0)
+        if not name_item:
+            return
+        
+        script_name = name_item.text()
+        
+        # Remove hotkey
+        if self.hotkey_registry.remove_hotkey(script_name):
+            # Update table display
+            hotkey_item = self.hotkeys_table.item(row, 2)
+            if hotkey_item:
+                hotkey_item.setText("(empty)")
+                hotkey_item.setForeground(Qt.GlobalColor.gray)
+            
+            # Mark that hotkeys have changed
+            self.hotkeys_changed.emit()

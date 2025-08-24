@@ -123,6 +123,9 @@ def main():
     # Connect settings request to window
     tray_manager.settings_requested.connect(window.open_settings)
     
+    # Connect hotkey changes to tray manager
+    window.hotkeys_changed.connect(tray_manager.refresh_hotkeys)
+    
     # Handle exit request
     def handle_exit():
         logger.info("Exit requested from system tray")

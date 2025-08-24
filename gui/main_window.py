@@ -11,6 +11,7 @@ logger = logging.getLogger('GUI.MainWindow')
 class MainWindow(QMainWindow):
     """Minimal main window class - only used as parent for settings dialog and script loading"""
     scripts_reloaded = pyqtSignal()
+    hotkeys_changed = pyqtSignal()
     
     def __init__(self, scripts_directory: str = "scripts"):
         super().__init__()
@@ -38,8 +39,9 @@ class MainWindow(QMainWindow):
     def open_settings(self):
         """Open the settings dialog"""
         if not self.settings_dialog:
-            self.settings_dialog = SettingsDialog(self)
+            self.settings_dialog = SettingsDialog(self.script_loader, self)
             self.settings_dialog.settings_changed.connect(self._on_settings_changed)
+            self.settings_dialog.hotkeys_changed.connect(self._on_hotkeys_changed)
         
         self.settings_dialog.load_settings()  # Reload current settings
         self.settings_dialog.exec()
@@ -47,3 +49,8 @@ class MainWindow(QMainWindow):
     def _on_settings_changed(self):
         """Handle settings changes"""
         logger.info("Settings changed, updating application behavior")
+    
+    def _on_hotkeys_changed(self):
+        """Handle hotkey changes"""
+        logger.info("Hotkeys changed, refreshing registrations")
+        self.hotkeys_changed.emit()

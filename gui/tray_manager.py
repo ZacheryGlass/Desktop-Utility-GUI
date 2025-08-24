@@ -9,6 +9,8 @@ from core.base_script import UtilityScript
 from core.script_loader import ScriptLoader
 from core.settings import SettingsManager
 from core.button_types import ButtonType
+from core.hotkey_manager import HotkeyManager
+from core.hotkey_registry import HotkeyRegistry
 
 logger = logging.getLogger('GUI.TrayManager')
 
@@ -25,6 +27,15 @@ class TrayManager(QObject):
         self.scripts = []
         self.script_actions = {}
         self.script_menus = {}  # Track submenus for CYCLE/SELECT scripts
+        self.script_name_to_instance = {}  # Map script names to instances for hotkey execution
+        
+        # Initialize hotkey management
+        self.hotkey_manager = HotkeyManager()
+        self.hotkey_registry = HotkeyRegistry(self.settings)
+        
+        # Connect hotkey signals
+        self.hotkey_manager.hotkey_triggered.connect(self._on_hotkey_triggered)
+        self.hotkey_manager.registration_failed.connect(self._on_hotkey_registration_failed)
         
         # Create tray icon
         self.tray_icon = QSystemTrayIcon(self)
@@ -48,6 +59,9 @@ class TrayManager(QObject):
         self.refresh_timer = QTimer()
         self.refresh_timer.timeout.connect(self._update_script_statuses)
         self.refresh_timer.start(5000)  # Update every 5 seconds
+        
+        # Start hotkey manager
+        self.hotkey_manager.start()
         
         logger.info("TrayManager initialized")
     
@@ -104,11 +118,13 @@ class TrayManager(QObject):
         
         self.scripts = self.script_loader.discover_scripts()
         self._rebuild_scripts_menu()
+        self._register_hotkeys()
     
     def _rebuild_scripts_menu(self):
         # Clear everything except title and first separator
         self.script_actions.clear()
         self.script_menus.clear()
+        self.script_name_to_instance.clear()
         
         # Remove all actions except title and first separator
         actions = self.context_menu.actions()
@@ -144,6 +160,9 @@ class TrayManager(QObject):
                     metadata = script.get_metadata()
                     script_name = metadata.get('name', 'Unknown Script')
                     button_type = metadata.get('button_type', ButtonType.RUN)
+                    
+                    # Store script instance by name for hotkey execution
+                    self.script_name_to_instance[script_name] = script
                     
                     if button_type == ButtonType.RUN:
                         self._add_run_script(script, script_name, metadata)
@@ -560,4 +579,63 @@ class TrayManager(QObject):
     
     def cleanup(self):
         self.refresh_timer.stop()
+        self.hotkey_manager.stop()
         self.tray_icon.hide()
+    
+    def _register_hotkeys(self):
+        """Register all configured hotkeys for scripts"""
+        if not self.script_loader:
+            return
+        
+        # Validate mappings first (remove orphaned ones)
+        self.hotkey_registry.validate_mappings(self.script_loader)
+        
+        # Clear existing hotkeys
+        self.hotkey_manager.unregister_all()
+        
+        # Register each configured hotkey
+        hotkey_mappings = self.hotkey_registry.get_all_mappings()
+        
+        for script_name, hotkey_string in hotkey_mappings.items():
+            if script_name in self.script_name_to_instance:
+                success = self.hotkey_manager.register_hotkey(script_name, hotkey_string)
+                if success:
+                    logger.info(f"Registered hotkey {hotkey_string} for {script_name}")
+                else:
+                    logger.warning(f"Failed to register hotkey {hotkey_string} for {script_name}")
+            else:
+                logger.warning(f"Script {script_name} has hotkey but is not loaded")
+    
+    def refresh_hotkeys(self):
+        """Refresh hotkey registrations (called when settings change)"""
+        self._register_hotkeys()
+    
+    def _on_hotkey_triggered(self, script_name: str, hotkey_string: str):
+        """Handle hotkey trigger events"""
+        logger.info(f"Hotkey {hotkey_string} triggered for script {script_name}")
+        
+        # Find the script instance
+        script = self.script_name_to_instance.get(script_name)
+        
+        if script:
+            # Execute the script
+            self._execute_script(script)
+        else:
+            logger.error(f"Script {script_name} not found for hotkey execution")
+            if self.settings.should_show_notifications():
+                self.show_notification(
+                    "Hotkey Error",
+                    f"Script '{script_name}' not found",
+                    QSystemTrayIcon.MessageIcon.Warning
+                )
+    
+    def _on_hotkey_registration_failed(self, hotkey_string: str, error_message: str):
+        """Handle hotkey registration failures"""
+        logger.error(f"Hotkey registration failed: {hotkey_string} - {error_message}")
+        
+        if self.settings.should_show_notifications():
+            self.show_notification(
+                "Hotkey Registration Failed",
+                f"{hotkey_string}: {error_message}",
+                QSystemTrayIcon.MessageIcon.Warning
+            )

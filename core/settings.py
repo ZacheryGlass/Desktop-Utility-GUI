@@ -22,6 +22,10 @@ class SettingsManager(QObject):
             'close_to_tray': True,
             'single_instance': True,
             'show_script_notifications': True
+        },
+        'hotkeys': {
+            # Hotkey mappings will be stored as 'hotkeys/ScriptName': 'Ctrl+Alt+X'
+            # This is just a placeholder for the schema
         }
     }
     
