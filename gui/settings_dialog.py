@@ -148,15 +148,16 @@ class SettingsDialog(QDialog):
         
         # Instructions
         instructions = QLabel(
-            "Configure keyboard shortcuts for scripts. Click on a hotkey cell to set or change it."
+            "Configure keyboard shortcuts and display names for scripts. "
+            "Click on a display name cell to edit the name, or click on a hotkey cell to set shortcuts."
         )
         instructions.setWordWrap(True)
         layout.addWidget(instructions)
         
         # Create table for hotkey configuration
         self.hotkeys_table = QTableWidget()
-        self.hotkeys_table.setColumnCount(4)
-        self.hotkeys_table.setHorizontalHeaderLabels(["Script", "Description", "Hotkey", "Actions"])
+        self.hotkeys_table.setColumnCount(5)
+        self.hotkeys_table.setHorizontalHeaderLabels(["Script", "Display Name", "Description", "Hotkey", "Actions"])
         
         # Set table styling for better visibility
         self.hotkeys_table.setStyleSheet("""
@@ -186,9 +187,10 @@ class SettingsDialog(QDialog):
         self.hotkeys_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.hotkeys_table.horizontalHeader().setStretchLastSection(False)
         self.hotkeys_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.hotkeys_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.hotkeys_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.hotkeys_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.hotkeys_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.hotkeys_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.hotkeys_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         
         # Connect cell click handler
         self.hotkeys_table.cellClicked.connect(self._on_hotkey_cell_clicked)
@@ -281,27 +283,40 @@ class SettingsDialog(QDialog):
         for script in scripts:
             try:
                 metadata = script.get_metadata()
-                script_name = metadata.get('name', 'Unknown')
+                original_name = metadata.get('name', 'Unknown')
                 description = metadata.get('description', '')
                 
+                # Get effective display name (custom or original)
+                display_name = self.script_loader.get_script_display_name(script)
+                
                 # Get current hotkey for this script
-                hotkey = self.hotkey_registry.get_hotkey(script_name)
+                hotkey = self.hotkey_registry.get_hotkey(original_name)
                 
                 # Add row
                 row_position = self.hotkeys_table.rowCount()
                 self.hotkeys_table.insertRow(row_position)
                 
-                # Script name
-                name_item = QTableWidgetItem(script_name)
+                # Original script name
+                name_item = QTableWidgetItem(original_name)
                 name_item.setData(Qt.ItemDataRole.UserRole, script)  # Store script reference
                 name_item.setForeground(Qt.GlobalColor.white)
                 self.hotkeys_table.setItem(row_position, 0, name_item)
+                
+                # Display name (clickable for editing)
+                display_item = QTableWidgetItem(display_name)
+                display_item.setForeground(Qt.GlobalColor.white)
+                display_item.setToolTip("Click to edit display name")
+                # Add visual indicator if custom name is set
+                custom_name = self.settings.get_custom_name(original_name)
+                if custom_name:
+                    display_item.setForeground(Qt.GlobalColor.cyan)  # Different color for custom names
+                self.hotkeys_table.setItem(row_position, 1, display_item)
                 
                 # Description
                 desc_item = QTableWidgetItem(description)
                 desc_item.setToolTip(description)
                 desc_item.setForeground(Qt.GlobalColor.white)
-                self.hotkeys_table.setItem(row_position, 1, desc_item)
+                self.hotkeys_table.setItem(row_position, 2, desc_item)
                 
                 # Hotkey
                 hotkey_item = QTableWidgetItem(hotkey if hotkey else "(empty)")
@@ -310,28 +325,74 @@ class SettingsDialog(QDialog):
                 else:
                     # Make sure hotkey text is white and visible
                     hotkey_item.setForeground(Qt.GlobalColor.white)
-                self.hotkeys_table.setItem(row_position, 2, hotkey_item)
+                self.hotkeys_table.setItem(row_position, 3, hotkey_item)
                 
                 # Clear button
                 clear_button = QPushButton("Clear")
                 clear_button.setMaximumWidth(60)
                 clear_button.clicked.connect(lambda checked, row=row_position: self._clear_hotkey(row))
-                self.hotkeys_table.setCellWidget(row_position, 3, clear_button)
+                self.hotkeys_table.setCellWidget(row_position, 4, clear_button)
                 
             except Exception as e:
                 logger.error(f"Error adding script to hotkeys table: {e}")
     
     def _on_hotkey_cell_clicked(self, row: int, column: int):
-        """Handle clicks on hotkey cells"""
-        if column != 2:  # Only handle clicks on hotkey column
-            return
-        
+        """Handle clicks on display name and hotkey cells"""
         # Get script info
         name_item = self.hotkeys_table.item(row, 0)
         if not name_item:
             return
         
-        script_name = name_item.text()
+        original_name = name_item.text()
+        
+        if column == 1:  # Display name column
+            self._edit_display_name(row, original_name)
+        elif column == 3:  # Hotkey column
+            self._edit_hotkey(row, original_name)
+    
+    def _edit_display_name(self, row: int, original_name: str):
+        """Handle editing of display name"""
+        from PyQt6.QtWidgets import QInputDialog
+        
+        current_custom_name = self.settings.get_custom_name(original_name)
+        current_display = current_custom_name if current_custom_name else original_name
+        
+        new_name, ok = QInputDialog.getText(
+            self,
+            "Edit Display Name",
+            f"Display name for '{original_name}':",
+            text=current_display
+        )
+        
+        if ok and new_name.strip():
+            new_name = new_name.strip()
+            if new_name != original_name:
+                # Set custom name
+                self.settings.set_custom_name(original_name, new_name)
+            else:
+                # Remove custom name (revert to original)
+                self.settings.remove_custom_name(original_name)
+            
+            # Update table display
+            display_item = self.hotkeys_table.item(row, 1)
+            if display_item:
+                display_item.setText(new_name)
+                # Update color based on whether it's custom or original
+                custom_name = self.settings.get_custom_name(original_name)
+                if custom_name:
+                    display_item.setForeground(Qt.GlobalColor.cyan)  # Custom name
+                else:
+                    display_item.setForeground(Qt.GlobalColor.white)  # Original name
+        elif ok and not new_name.strip():
+            # Empty name - revert to original
+            self.settings.remove_custom_name(original_name)
+            display_item = self.hotkeys_table.item(row, 1)
+            if display_item:
+                display_item.setText(original_name)
+                display_item.setForeground(Qt.GlobalColor.white)
+    
+    def _edit_hotkey(self, row: int, script_name: str):
+        """Handle editing of hotkey"""
         current_hotkey = self.hotkey_registry.get_hotkey(script_name)
         
         # Show hotkey configuration dialog
@@ -360,7 +421,7 @@ class SettingsDialog(QDialog):
                     self.hotkey_registry.remove_hotkey(script_name)
                 
                 # Update table display
-                hotkey_item = self.hotkeys_table.item(row, 2)
+                hotkey_item = self.hotkeys_table.item(row, 3)
                 if hotkey_item:
                     hotkey_item.setText(new_hotkey if new_hotkey else "(empty)")
                     hotkey_item.setForeground(

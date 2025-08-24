@@ -161,29 +161,32 @@ class TrayManager(QObject):
             for script in self.scripts:
                 try:
                     metadata = script.get_metadata()
-                    script_name = metadata.get('name', 'Unknown Script')
+                    original_name = metadata.get('name', 'Unknown Script')
                     button_type = metadata.get('button_type', ButtonType.RUN)
                     
-                    # Store script instance by name for hotkey execution
-                    self.script_name_to_instance[script_name] = script
+                    # Get effective display name (custom or original)
+                    display_name = self.script_loader.get_script_display_name(script)
+                    
+                    # Store script instance by original name for hotkey execution (hotkeys use original names)
+                    self.script_name_to_instance[original_name] = script
                     
                     if button_type == ButtonType.RUN:
-                        self._add_run_script(script, script_name, metadata)
+                        self._add_run_script(script, original_name, display_name, metadata)
                     elif button_type == ButtonType.TOGGLE:
-                        self._add_toggle_script(script, script_name, metadata)
+                        self._add_toggle_script(script, original_name, display_name, metadata)
                     elif button_type == ButtonType.CYCLE:
-                        self._add_cycle_script(script, script_name, metadata)
+                        self._add_cycle_script(script, original_name, display_name, metadata)
                     elif button_type == ButtonType.SELECT:
-                        self._add_select_script(script, script_name, metadata)
+                        self._add_select_script(script, original_name, display_name, metadata)
                     elif button_type == ButtonType.NUMBER:
-                        self._add_number_script(script, script_name, metadata)
+                        self._add_number_script(script, original_name, display_name, metadata)
                     elif button_type == ButtonType.TEXT_INPUT:
-                        self._add_text_input_script(script, script_name, metadata)
+                        self._add_text_input_script(script, original_name, display_name, metadata)
                     elif button_type == ButtonType.SLIDER:
-                        logger.info(f"Skipping deprecated SLIDER script: {script_name}")
+                        logger.info(f"Skipping deprecated SLIDER script: {display_name}")
                         continue
                     else:
-                        self._add_run_script(script, script_name, metadata)
+                        self._add_run_script(script, original_name, display_name, metadata)
                         
                 except Exception as e:
                     logger.error(f"Error adding script to tray menu: {e}")
@@ -201,55 +204,55 @@ class TrayManager(QObject):
         exit_action.triggered.connect(self.exit_requested.emit)
         self.context_menu.addAction(exit_action)
     
-    def _add_run_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_run_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
         """Add a simple RUN script as a menu item"""
-        # Get hotkey for this script instead of status
-        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        # Get hotkey for this script (using original name)
+        hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            display_name = f"{script_name}\t│ {hotkey}"
+            menu_text = f"{display_name}\t│ {hotkey}"
         else:
-            display_name = script_name
+            menu_text = display_name
         
-        action = QAction(display_name, self)
+        action = QAction(menu_text, self)
         action.setToolTip(metadata.get('description', ''))
         action.triggered.connect(lambda checked, s=script: self._execute_script(s))
         
         self.script_actions[action] = script
         self.context_menu.addAction(action)
     
-    def _add_toggle_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_toggle_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
         """Add a TOGGLE script as a menu item showing current state"""
-        # Get hotkey for this script instead of status
-        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        # Get hotkey for this script (using original name)
+        hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            display_name = f"{script_name}\t│ {hotkey}"
+            menu_text = f"{display_name}\t│ {hotkey}"
         else:
-            display_name = script_name
+            menu_text = display_name
         
-        action = QAction(display_name, self)
+        action = QAction(menu_text, self)
         action.setToolTip(f"{metadata.get('description', '')} (Click to toggle)")
         action.triggered.connect(lambda checked, s=script: self._execute_toggle_script(s))
         
         self.script_actions[action] = script
         self.context_menu.addAction(action)
     
-    def _add_cycle_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_cycle_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
         """Add a CYCLE script as a submenu with all options"""
         button_options = metadata.get('button_options')
         if not button_options or not hasattr(button_options, 'options') or not button_options.options:
             # Fallback to simple execution if no options defined
-            self._add_run_script(script, script_name, metadata)
+            self._add_run_script(script, original_name, display_name, metadata)
             return
         
         # Create submenu for cycle options - include hotkey in submenu title
-        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            submenu_title = f"{script_name}\t│ {hotkey}"
+            submenu_title = f"{display_name}\t│ {hotkey}"
         else:
-            submenu_title = script_name
+            submenu_title = display_name
         submenu = QMenu(submenu_title, self.context_menu)
         
         try:
@@ -277,21 +280,21 @@ class TrayManager(QObject):
         self.script_menus[script] = submenu
         self.context_menu.addMenu(submenu)
     
-    def _add_select_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_select_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
         """Add a SELECT script as a submenu with all options"""
         button_options = metadata.get('button_options')
         if not button_options or not hasattr(button_options, 'options') or not button_options.options:
             # Fallback to simple execution if no options defined
-            self._add_run_script(script, script_name, metadata)
+            self._add_run_script(script, original_name, display_name, metadata)
             return
         
         # Create submenu for select options - include hotkey in submenu title
-        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            submenu_title = f"{script_name}\t│ {hotkey}"
+            submenu_title = f"{display_name}\t│ {hotkey}"
         else:
-            submenu_title = script_name
+            submenu_title = display_name
         submenu = QMenu(submenu_title, self.context_menu)
         
         try:
@@ -319,34 +322,34 @@ class TrayManager(QObject):
         self.script_menus[script] = submenu
         self.context_menu.addMenu(submenu)
     
-    def _add_number_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_number_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
         """Add a NUMBER script that shows input dialog when clicked"""
-        # Get hotkey for this script instead of status
-        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        # Get hotkey for this script (using original name)
+        hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            display_name = f"{script_name}\t│ {hotkey}"
+            menu_text = f"{display_name}\t│ {hotkey}"
         else:
-            display_name = script_name
+            menu_text = display_name
         
-        action = QAction(display_name, self)
+        action = QAction(menu_text, self)
         action.setToolTip(f"{metadata.get('description', '')} (Click to set value)")
         action.triggered.connect(lambda checked, s=script: self._execute_number_script(s, metadata))
         
         self.script_actions[action] = script
         self.context_menu.addAction(action)
     
-    def _add_text_input_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_text_input_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
         """Add a TEXT_INPUT script that shows input dialog when clicked"""
-        # Get hotkey for this script instead of status
-        hotkey = self.hotkey_registry.get_hotkey(script_name)
+        # Get hotkey for this script (using original name)
+        hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            display_name = f"{script_name}\t│ {hotkey}"
+            menu_text = f"{display_name}\t│ {hotkey}"
         else:
-            display_name = script_name
+            menu_text = display_name
         
-        action = QAction(display_name, self)
+        action = QAction(menu_text, self)
         action.setToolTip(f"{metadata.get('description', '')} (Click to enter text)")
         action.triggered.connect(lambda checked, s=script: self._execute_text_input_script(s, metadata))
         
@@ -521,13 +524,14 @@ class TrayManager(QObject):
             try:
                 # Update submenu title to show hotkey with alignment
                 metadata = script.get_metadata()
-                script_name = metadata.get('name', 'Unknown Script')
-                hotkey = self.hotkey_registry.get_hotkey(script_name)
+                original_name = metadata.get('name', 'Unknown Script')
+                display_name = self.script_loader.get_script_display_name(script)
+                hotkey = self.hotkey_registry.get_hotkey(original_name)
                 if hotkey:
                     # Use tab character for alignment in monospace font
-                    submenu_title = f"{script_name}\t| {hotkey}"
+                    submenu_title = f"{display_name}\t| {hotkey}"
                 else:
-                    submenu_title = script_name
+                    submenu_title = display_name
                 submenu.setTitle(submenu_title)
                 
                 # Update option checkmarks based on current status
@@ -549,16 +553,17 @@ class TrayManager(QObject):
                 
             try:
                 metadata = script.get_metadata()
-                script_name = metadata.get('name', 'Unknown Script')
+                original_name = metadata.get('name', 'Unknown Script')
+                display_name = self.script_loader.get_script_display_name(script)
                 button_type = metadata.get('button_type', ButtonType.RUN)
                 
                 # Update action text to show hotkey with alignment
-                hotkey = self.hotkey_registry.get_hotkey(script_name)
+                hotkey = self.hotkey_registry.get_hotkey(original_name)
                 if hotkey:
                     # Use tab character for alignment in monospace font, with visual formatting
-                    action.setText(f"{script_name}\t│ {hotkey}")
+                    action.setText(f"{display_name}\t│ {hotkey}")
                 else:
-                    action.setText(script_name)
+                    action.setText(display_name)
                 processed_scripts.add(script)
                         
             except Exception as e:

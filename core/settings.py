@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 from PyQt6.QtCore import QSettings, QObject, pyqtSignal
 
 logger = logging.getLogger('Core.Settings')
@@ -25,6 +25,10 @@ class SettingsManager(QObject):
         },
         'hotkeys': {
             # Hotkey mappings will be stored as 'hotkeys/ScriptName': 'Ctrl+Alt+X'
+            # This is just a placeholder for the schema
+        },
+        'custom_names': {
+            # Custom display names will be stored as 'custom_names/OriginalName': 'CustomName'
             # This is just a placeholder for the schema
         },
         'appearance': {
@@ -131,3 +135,39 @@ class SettingsManager(QObject):
     
     def set_font_size(self, font_size: int) -> None:
         self.set('appearance/font_size', font_size)
+    
+    # Custom display name methods
+    def get_custom_name(self, original_name: str) -> Optional[str]:
+        """Get custom display name for a script, or None if no custom name is set."""
+        return self.get(f'custom_names/{original_name}')
+    
+    def set_custom_name(self, original_name: str, custom_name: str) -> None:
+        """Set a custom display name for a script."""
+        if custom_name.strip():
+            self.set(f'custom_names/{original_name}', custom_name.strip())
+        else:
+            self.remove_custom_name(original_name)
+    
+    def remove_custom_name(self, original_name: str) -> None:
+        """Remove custom display name for a script (revert to original)."""
+        key = f'custom_names/{original_name}'
+        if self.settings.contains(key):
+            self.settings.remove(key)
+            self.settings.sync()
+            logger.debug(f"Removed custom name for: {original_name}")
+    
+    def get_all_custom_names(self) -> Dict[str, str]:
+        """Get all custom display names as a dict of {original_name: custom_name}."""
+        result = {}
+        self.settings.beginGroup('custom_names')
+        try:
+            for key in self.settings.allKeys():
+                result[key] = self.settings.value(key, '')
+        finally:
+            self.settings.endGroup()
+        return result
+    
+    def get_effective_name(self, original_name: str) -> str:
+        """Get the effective display name (custom if set, otherwise original)."""
+        custom_name = self.get_custom_name(original_name)
+        return custom_name if custom_name else original_name
