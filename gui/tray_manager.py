@@ -155,6 +155,17 @@ class TrayManager(QObject):
             no_scripts_action.setEnabled(False)
             self.context_menu.addAction(no_scripts_action)
         else:
+            # First pass: calculate the maximum script name length for alignment
+            max_name_length = 0
+            for script in self.scripts:
+                try:
+                    metadata = script.get_metadata()
+                    script_name = metadata.get('name', 'Unknown Script')
+                    max_name_length = max(max_name_length, len(script_name))
+                except Exception as e:
+                    logger.error(f"Error getting script name for alignment: {e}")
+            
+            # Second pass: add scripts with aligned formatting
             for script in self.scripts:
                 try:
                     metadata = script.get_metadata()
@@ -165,22 +176,22 @@ class TrayManager(QObject):
                     self.script_name_to_instance[script_name] = script
                     
                     if button_type == ButtonType.RUN:
-                        self._add_run_script(script, script_name, metadata)
+                        self._add_run_script(script, script_name, metadata, max_name_length)
                     elif button_type == ButtonType.TOGGLE:
-                        self._add_toggle_script(script, script_name, metadata)
+                        self._add_toggle_script(script, script_name, metadata, max_name_length)
                     elif button_type == ButtonType.CYCLE:
-                        self._add_cycle_script(script, script_name, metadata)
+                        self._add_cycle_script(script, script_name, metadata, max_name_length)
                     elif button_type == ButtonType.SELECT:
-                        self._add_select_script(script, script_name, metadata)
+                        self._add_select_script(script, script_name, metadata, max_name_length)
                     elif button_type == ButtonType.NUMBER:
-                        self._add_number_script(script, script_name, metadata)
+                        self._add_number_script(script, script_name, metadata, max_name_length)
                     elif button_type == ButtonType.TEXT_INPUT:
-                        self._add_text_input_script(script, script_name, metadata)
+                        self._add_text_input_script(script, script_name, metadata, max_name_length)
                     elif button_type == ButtonType.SLIDER:
                         logger.info(f"Skipping deprecated SLIDER script: {script_name}")
                         continue
                     else:
-                        self._add_run_script(script, script_name, metadata)
+                        self._add_run_script(script, script_name, metadata, max_name_length)
                         
                 except Exception as e:
                     logger.error(f"Error adding script to tray menu: {e}")
@@ -198,12 +209,14 @@ class TrayManager(QObject):
         exit_action.triggered.connect(self.exit_requested.emit)
         self.context_menu.addAction(exit_action)
     
-    def _add_run_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_run_script(self, script: UtilityScript, script_name: str, metadata: dict, max_name_length: int = 0):
         """Add a simple RUN script as a menu item"""
         # Get hotkey for this script instead of status
         hotkey = self.hotkey_registry.get_hotkey(script_name)
         if hotkey:
-            display_name = f"{script_name} ({hotkey})"
+            # Pad script name to align the pipe character
+            padded_name = script_name.ljust(max_name_length) if max_name_length > 0 else script_name
+            display_name = f"{padded_name} | {hotkey}"
         else:
             display_name = script_name
         
@@ -214,12 +227,14 @@ class TrayManager(QObject):
         self.script_actions[action] = script
         self.context_menu.addAction(action)
     
-    def _add_toggle_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_toggle_script(self, script: UtilityScript, script_name: str, metadata: dict, max_name_length: int = 0):
         """Add a TOGGLE script as a menu item showing current state"""
         # Get hotkey for this script instead of status
         hotkey = self.hotkey_registry.get_hotkey(script_name)
         if hotkey:
-            display_name = f"{script_name} ({hotkey})"
+            # Pad script name to align the pipe character
+            padded_name = script_name.ljust(max_name_length) if max_name_length > 0 else script_name
+            display_name = f"{padded_name} | {hotkey}"
         else:
             display_name = script_name
         
@@ -230,7 +245,7 @@ class TrayManager(QObject):
         self.script_actions[action] = script
         self.context_menu.addAction(action)
     
-    def _add_cycle_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_cycle_script(self, script: UtilityScript, script_name: str, metadata: dict, max_name_length: int = 0):
         """Add a CYCLE script as a submenu with all options"""
         button_options = metadata.get('button_options')
         if not button_options or not hasattr(button_options, 'options') or not button_options.options:
@@ -240,7 +255,12 @@ class TrayManager(QObject):
         
         # Create submenu for cycle options - include hotkey in submenu title
         hotkey = self.hotkey_registry.get_hotkey(script_name)
-        submenu_title = f"{script_name} ({hotkey})" if hotkey else script_name
+        if hotkey:
+            # Pad script name to align the pipe character
+            padded_name = script_name.ljust(max_name_length) if max_name_length > 0 else script_name
+            submenu_title = f"{padded_name} | {hotkey}"
+        else:
+            submenu_title = script_name
         submenu = QMenu(submenu_title, self.context_menu)
         
         try:
@@ -268,7 +288,7 @@ class TrayManager(QObject):
         self.script_menus[script] = submenu
         self.context_menu.addMenu(submenu)
     
-    def _add_select_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_select_script(self, script: UtilityScript, script_name: str, metadata: dict, max_name_length: int = 0):
         """Add a SELECT script as a submenu with all options"""
         button_options = metadata.get('button_options')
         if not button_options or not hasattr(button_options, 'options') or not button_options.options:
@@ -278,7 +298,12 @@ class TrayManager(QObject):
         
         # Create submenu for select options - include hotkey in submenu title
         hotkey = self.hotkey_registry.get_hotkey(script_name)
-        submenu_title = f"{script_name} ({hotkey})" if hotkey else script_name
+        if hotkey:
+            # Pad script name to align the pipe character
+            padded_name = script_name.ljust(max_name_length) if max_name_length > 0 else script_name
+            submenu_title = f"{padded_name} | {hotkey}"
+        else:
+            submenu_title = script_name
         submenu = QMenu(submenu_title, self.context_menu)
         
         try:
@@ -306,12 +331,14 @@ class TrayManager(QObject):
         self.script_menus[script] = submenu
         self.context_menu.addMenu(submenu)
     
-    def _add_number_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_number_script(self, script: UtilityScript, script_name: str, metadata: dict, max_name_length: int = 0):
         """Add a NUMBER script that shows input dialog when clicked"""
         # Get hotkey for this script instead of status
         hotkey = self.hotkey_registry.get_hotkey(script_name)
         if hotkey:
-            display_name = f"{script_name} ({hotkey})"
+            # Pad script name to align the pipe character
+            padded_name = script_name.ljust(max_name_length) if max_name_length > 0 else script_name
+            display_name = f"{padded_name} | {hotkey}"
         else:
             display_name = script_name
         
@@ -322,12 +349,14 @@ class TrayManager(QObject):
         self.script_actions[action] = script
         self.context_menu.addAction(action)
     
-    def _add_text_input_script(self, script: UtilityScript, script_name: str, metadata: dict):
+    def _add_text_input_script(self, script: UtilityScript, script_name: str, metadata: dict, max_name_length: int = 0):
         """Add a TEXT_INPUT script that shows input dialog when clicked"""
         # Get hotkey for this script instead of status
         hotkey = self.hotkey_registry.get_hotkey(script_name)
         if hotkey:
-            display_name = f"{script_name} ({hotkey})"
+            # Pad script name to align the pipe character
+            padded_name = script_name.ljust(max_name_length) if max_name_length > 0 else script_name
+            display_name = f"{padded_name} | {hotkey}"
         else:
             display_name = script_name
         
@@ -494,6 +523,25 @@ class TrayManager(QObject):
         """Update script status display in menu items"""
         logger.debug(f"Updating status for {len(self.script_actions)} script actions and {len(self.script_menus)} script menus")
         
+        # Calculate max name length for alignment
+        max_name_length = 0
+        all_scripts = set()
+        
+        # Collect all scripts from both actions and menus
+        for script in self.script_menus.keys():
+            all_scripts.add(script)
+        for script in self.script_actions.values():
+            all_scripts.add(script)
+        
+        # Calculate max length
+        for script in all_scripts:
+            try:
+                metadata = script.get_metadata()
+                script_name = metadata.get('name', 'Unknown Script')
+                max_name_length = max(max_name_length, len(script_name))
+            except Exception as e:
+                logger.error(f"Error getting script name for alignment during update: {e}")
+        
         # Track which scripts we've already processed to avoid duplicates
         processed_scripts = set()
         
@@ -504,11 +552,15 @@ class TrayManager(QObject):
             processed_scripts.add(script)
             
             try:
-                # Update submenu title to show hotkey
+                # Update submenu title to show hotkey with alignment
                 metadata = script.get_metadata()
                 script_name = metadata.get('name', 'Unknown Script')
                 hotkey = self.hotkey_registry.get_hotkey(script_name)
-                submenu_title = f"{script_name} ({hotkey})" if hotkey else script_name
+                if hotkey:
+                    padded_name = script_name.ljust(max_name_length) if max_name_length > 0 else script_name
+                    submenu_title = f"{padded_name} | {hotkey}"
+                else:
+                    submenu_title = script_name
                 submenu.setTitle(submenu_title)
                 
                 # Update option checkmarks based on current status
@@ -533,10 +585,11 @@ class TrayManager(QObject):
                 script_name = metadata.get('name', 'Unknown Script')
                 button_type = metadata.get('button_type', ButtonType.RUN)
                 
-                # Update action text to show hotkey instead of status
+                # Update action text to show hotkey with alignment
                 hotkey = self.hotkey_registry.get_hotkey(script_name)
                 if hotkey:
-                    action.setText(f"{script_name} ({hotkey})")
+                    padded_name = script_name.ljust(max_name_length) if max_name_length > 0 else script_name
+                    action.setText(f"{padded_name} | {hotkey}")
                 else:
                     action.setText(script_name)
                 processed_scripts.add(script)

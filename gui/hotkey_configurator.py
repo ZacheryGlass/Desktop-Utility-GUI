@@ -37,10 +37,12 @@ class HotkeyRecorder(QLineEdit):
                 border: 2px solid #ccc;
                 border-radius: 4px;
                 background-color: #f9f9f9;
+                color: #000;
             }
             QLineEdit:focus {
                 border-color: #0078d4;
                 background-color: #fff;
+                color: #000;
             }
         """)
         
@@ -193,6 +195,7 @@ class HotkeyRecorder(QLineEdit):
                 border: 2px solid #0078d4;
                 border-radius: 4px;
                 background-color: #e6f2ff;
+                color: #000;
             }
         """)
     
@@ -206,10 +209,12 @@ class HotkeyRecorder(QLineEdit):
                 border: 2px solid #ccc;
                 border-radius: 4px;
                 background-color: #f9f9f9;
+                color: #000;
             }
             QLineEdit:focus {
                 border-color: #0078d4;
                 background-color: #fff;
+                color: #000;
             }
         """)
     
