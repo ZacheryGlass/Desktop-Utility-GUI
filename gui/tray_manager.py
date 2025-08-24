@@ -626,9 +626,9 @@ class TrayManager(QObject):
         """Handle hotkey registration failures"""
         logger.error(f"Hotkey registration failed: {hotkey_string} - {error_message}")
         
-        if self.settings.should_show_notifications():
-            self.show_notification(
-                "Hotkey Registration Failed",
-                f"{hotkey_string}: {error_message}",
-                QSystemTrayIcon.MessageIcon.Warning
-            )
+        # Always show registration failures as they're important feedback
+        self.show_notification(
+            "Hotkey Registration Failed",
+            f"{hotkey_string}: {error_message}",
+            QSystemTrayIcon.MessageIcon.Warning
+        )

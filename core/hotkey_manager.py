@@ -1,10 +1,7 @@
 import logging
-import ctypes
-from ctypes import wintypes
-import threading
-from typing import Dict, Optional, Callable, Tuple, Set
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
-from PyQt6.QtWidgets import QApplication
+from typing import Dict, Optional, Tuple, Set
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtWidgets import QApplication, QWidget
 import win32con
 import win32api
 import win32gui
@@ -74,102 +71,52 @@ RESERVED_HOTKEYS = {
 }
 
 
-class HotkeyListener(QThread):
-    """Background thread that listens for Windows hotkey messages"""
+class HotkeyWidget(QWidget):
+    """Hidden Qt widget that receives Windows hotkey messages in the main thread"""
     hotkey_triggered = pyqtSignal(int)  # Emits hotkey ID when triggered
     
     def __init__(self):
         super().__init__()
-        self.hwnd = None
-        self.running = False
-        self._lock = threading.Lock()
         
-    def run(self):
-        """Main message loop for hotkey listening"""
+        # Set window flags to make it invisible and not interfere with other windows
+        from PyQt6.QtCore import Qt
+        self.setWindowFlags(
+            Qt.WindowType.Tool | 
+            Qt.WindowType.FramelessWindowHint | 
+            Qt.WindowType.WindowStaysOnBottomHint
+        )
+        
+        # Hide the widget and make it very small
+        self.hide()
+        self.resize(1, 1)
+        
+        # Ensure the widget is created and get the window handle
+        self.show()  # Briefly show to create the window
+        self.hwnd = int(self.winId())
+        self.hide()  # Hide it again
+        
+        logger.info(f"Hotkey widget created with hwnd: {self.hwnd}")
+    
+    def nativeEvent(self, eventType, message):
+        """Handle native Windows events"""
         try:
-            # Create a simple window using win32gui for receiving messages
-            import win32gui
-            
-            # Register a window class
-            wc = win32gui.WNDCLASS()
-            wc.lpfnWndProc = lambda hwnd, msg, wparam, lparam: 0
-            wc.lpszClassName = "HotkeyListener"
-            wc.hInstance = win32api.GetModuleHandle(None)
-            
-            try:
-                win32gui.RegisterClass(wc)
-            except Exception:
-                # Class might already be registered
-                pass
-            
-            # Create a message-only window
-            self.hwnd = win32gui.CreateWindow(
-                "HotkeyListener",
-                "Hotkey Listener Window",
-                0,
-                0, 0, 0, 0,
-                win32con.HWND_MESSAGE,
-                0,
-                wc.hInstance,
-                None
-            )
-            
-            if not self.hwnd:
-                logger.error("Failed to create message window")
-                return
+            if eventType == "windows_generic_MSG":
+                import ctypes
+                from ctypes import wintypes
                 
-            logger.info(f"Hotkey listener started with hwnd: {self.hwnd}")
-            self.running = True
-            
-            # Message loop using win32gui
-            while self.running:
-                try:
-                    bRet, msg = win32gui.GetMessage(self.hwnd, 0, 0)
-                    
-                    if bRet == 0:  # WM_QUIT
-                        break
-                    elif bRet == -1:  # Error
-                        logger.error("Error in message loop")
-                        break
-                    else:
-                        if msg[1] == win32con.WM_HOTKEY:
-                            hotkey_id = msg[2]  # wParam
-                            logger.debug(f"Hotkey triggered: ID {hotkey_id}")
-                            self.hotkey_triggered.emit(hotkey_id)
-                        
-                        win32gui.TranslateMessage(msg)
-                        win32gui.DispatchMessage(msg)
-                except Exception as e:
-                    if self.running:
-                        logger.error(f"Error in message loop: {e}")
-                    break
+                # Cast the message to a MSG structure
+                msg = ctypes.cast(int(message), ctypes.POINTER(wintypes.MSG)).contents
+                
+                if msg.message == win32con.WM_HOTKEY:
+                    hotkey_id = msg.wParam
+                    logger.debug(f"Hotkey triggered via nativeEvent: ID {hotkey_id}")
+                    self.hotkey_triggered.emit(hotkey_id)
+                    return True, 0
                     
         except Exception as e:
-            logger.error(f"Error in hotkey listener thread: {e}")
-        finally:
-            self.cleanup()
-    
-    def stop(self):
-        """Stop the message loop"""
-        self.running = False
-        if self.hwnd:
-            # Post WM_QUIT to exit the message loop
-            import win32gui
-            try:
-                win32gui.PostMessage(self.hwnd, win32con.WM_QUIT, 0, 0)
-            except Exception as e:
-                logger.error(f"Error posting quit message: {e}")
-    
-    def cleanup(self):
-        """Clean up the message window"""
-        if self.hwnd:
-            import win32gui
-            try:
-                win32gui.DestroyWindow(self.hwnd)
-            except Exception as e:
-                logger.error(f"Error destroying window: {e}")
-            self.hwnd = None
-            logger.info("Hotkey listener cleaned up")
+            logger.error(f"Error handling native event: {e}")
+        
+        return False, 0
 
 
 class HotkeyManager(QObject):
@@ -180,42 +127,34 @@ class HotkeyManager(QObject):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.listener = None
+        self.widget = None
         self.hotkeys: Dict[int, Tuple[str, str]] = {}  # ID -> (script_name, hotkey_string)
         self.registered_combos: Set[str] = set()  # Track registered combinations
         self.next_id = 1
-        self._lock = threading.Lock()
         
         logger.info("HotkeyManager initialized")
     
     def start(self):
-        """Start the hotkey listener thread"""
-        if self.listener is None or not self.listener.isRunning():
-            self.listener = HotkeyListener()
-            self.listener.hotkey_triggered.connect(self._on_hotkey_triggered)
-            self.listener.start()
-            
-            # Wait for hwnd to be available
-            import time
-            for _ in range(10):
-                if self.listener.hwnd:
-                    break
-                time.sleep(0.1)
-            
+        """Start the hotkey system by creating the widget in main thread"""
+        if self.widget is None:
+            self.widget = HotkeyWidget()
+            self.widget.hotkey_triggered.connect(self._on_hotkey_triggered)
             logger.info("HotkeyManager started")
+        else:
+            logger.debug("HotkeyManager already started")
     
     def stop(self):
-        """Stop the hotkey listener and unregister all hotkeys"""
+        """Stop the hotkey system and unregister all hotkeys"""
         logger.info("Stopping HotkeyManager...")
         
         # Unregister all hotkeys
         self.unregister_all()
         
-        # Stop listener thread
-        if self.listener:
-            self.listener.stop()
-            self.listener.wait(2000)  # Wait up to 2 seconds
-            self.listener = None
+        # Clean up widget
+        if self.widget:
+            self.widget.hide()
+            self.widget.deleteLater()
+            self.widget = None
         
         logger.info("HotkeyManager stopped")
     
@@ -336,8 +275,8 @@ class HotkeyManager(QObject):
         
         Returns: True if successful, False otherwise
         """
-        if not self.listener or not self.listener.hwnd:
-            logger.error("Hotkey listener not started")
+        if not self.widget:
+            logger.error("Hotkey system not started")
             return False
         
         # Normalize the hotkey string
@@ -358,103 +297,107 @@ class HotkeyManager(QObject):
             self.registration_failed.emit(hotkey_string, error_msg)
             return False
         
-        with self._lock:
-            hotkey_id = self.next_id
-            self.next_id += 1
+        # Make sure widget is created
+        if not self.widget:
+            error_msg = "Hotkey system not started"
+            logger.error(error_msg)
+            self.registration_failed.emit(normalized, error_msg)
+            return False
             
-            # Attempt to register with Windows
-            try:
-                import win32gui
-                win32gui.RegisterHotKey(
-                    self.listener.hwnd, hotkey_id, modifiers, vk_code
-                )
-                
-                # If we get here, registration was successful
-                self.hotkeys[hotkey_id] = (script_name, normalized)
-                self.registered_combos.add(normalized)
-                logger.info(f"Registered hotkey {normalized} for script {script_name} (ID: {hotkey_id})")
-                return True
-                    
-            except Exception as e:
-                error_msg = str(e)
-                
-                # Check if it's because the hotkey is already registered
-                if "already registered" in error_msg.lower() or "1409" in error_msg:
+        hotkey_id = self.next_id
+        self.next_id += 1
+        
+        # Attempt to register with Windows using the widget's HWND
+        try:
+            result = win32gui.RegisterHotKey(
+                self.widget.hwnd, hotkey_id, modifiers, vk_code
+            )
+            
+            if result == 0:
+                # Registration failed
+                import win32api
+                error_code = win32api.GetLastError()
+                if error_code == 1409:  # ERROR_HOTKEY_ALREADY_REGISTERED
                     error_msg = f"Hotkey {normalized} is already registered by another application"
                 else:
-                    error_msg = f"Failed to register hotkey {normalized}: {error_msg}"
-                
+                    error_msg = f"Failed to register hotkey {normalized}: Windows error {error_code}"
                 logger.error(error_msg)
                 self.registration_failed.emit(normalized, error_msg)
                 return False
+            
+            # Registration successful
+            self.hotkeys[hotkey_id] = (script_name, normalized)
+            self.registered_combos.add(normalized)
+            logger.info(f"Registered hotkey {normalized} for script {script_name} (ID: {hotkey_id})")
+            return True
+                
+        except Exception as e:
+            error_msg = f"Exception registering hotkey {normalized}: {str(e)}"
+            logger.error(error_msg)
+            self.registration_failed.emit(normalized, error_msg)
+            return False
     
     def unregister_hotkey(self, script_name: str) -> bool:
         """Unregister a hotkey for a script"""
-        if not self.listener or not self.listener.hwnd:
+        if not self.widget:
             return False
         
-        with self._lock:
-            # Find the hotkey ID for this script
-            hotkey_id = None
-            hotkey_string = None
+        # Find the hotkey ID for this script
+        hotkey_id = None
+        hotkey_string = None
+        
+        for hid, (sname, hstring) in self.hotkeys.items():
+            if sname == script_name:
+                hotkey_id = hid
+                hotkey_string = hstring
+                break
+        
+        if hotkey_id is None:
+            logger.warning(f"No hotkey registered for script {script_name}")
+            return False
+        
+        # Unregister with Windows
+        try:
+            win32gui.UnregisterHotKey(self.widget.hwnd, hotkey_id)
             
-            for hid, (sname, hstring) in self.hotkeys.items():
-                if sname == script_name:
-                    hotkey_id = hid
-                    hotkey_string = hstring
-                    break
-            
-            if hotkey_id is None:
-                logger.warning(f"No hotkey registered for script {script_name}")
-                return False
-            
-            # Unregister with Windows
-            try:
-                import win32gui
-                win32gui.UnregisterHotKey(self.listener.hwnd, hotkey_id)
+            # If we get here, unregistration was successful
+            del self.hotkeys[hotkey_id]
+            self.registered_combos.discard(hotkey_string)
+            logger.info(f"Unregistered hotkey for script {script_name}")
+            return True
                 
-                # If we get here, unregistration was successful
-                del self.hotkeys[hotkey_id]
-                self.registered_combos.discard(hotkey_string)
-                logger.info(f"Unregistered hotkey for script {script_name}")
-                return True
-                    
-            except Exception as e:
-                logger.error(f"Exception unregistering hotkey for {script_name}: {e}")
-                return False
+        except Exception as e:
+            logger.error(f"Exception unregistering hotkey for {script_name}: {e}")
+            return False
     
     def unregister_all(self):
         """Unregister all hotkeys"""
-        if not self.listener or not self.listener.hwnd:
+        if not self.widget:
             return
         
-        import win32gui
-        with self._lock:
-            for hotkey_id in list(self.hotkeys.keys()):
-                try:
-                    win32gui.UnregisterHotKey(self.listener.hwnd, hotkey_id)
-                except Exception as e:
-                    logger.error(f"Error unregistering hotkey {hotkey_id}: {e}")
-            
-            self.hotkeys.clear()
-            self.registered_combos.clear()
-            logger.info("All hotkeys unregistered")
+        for hotkey_id in list(self.hotkeys.keys()):
+            try:
+                win32gui.UnregisterHotKey(self.widget.hwnd, hotkey_id)
+            except Exception as e:
+                logger.error(f"Error unregistering hotkey {hotkey_id}: {e}")
+        
+        self.hotkeys.clear()
+        self.registered_combos.clear()
+        logger.info("All hotkeys unregistered")
     
     def get_registered_hotkeys(self) -> Dict[str, str]:
         """Get all registered hotkeys as script_name -> hotkey_string mapping"""
-        with self._lock:
-            return {script_name: hotkey_string 
-                    for script_name, hotkey_string in self.hotkeys.values()}
+        return {script_name: hotkey_string 
+                for script_name, hotkey_string in self.hotkeys.values()}
     
     def _on_hotkey_triggered(self, hotkey_id: int):
-        """Handle hotkey trigger from listener thread"""
-        with self._lock:
-            if hotkey_id in self.hotkeys:
-                script_name, hotkey_string = self.hotkeys[hotkey_id]
-                logger.info(f"Hotkey {hotkey_string} triggered for script {script_name}")
-                self.hotkey_triggered.emit(script_name, hotkey_string)
-            else:
-                logger.warning(f"Unknown hotkey ID triggered: {hotkey_id}")
+        """Handle hotkey trigger from widget"""
+        if hotkey_id in self.hotkeys:
+            script_name, hotkey_string = self.hotkeys[hotkey_id]
+            logger.info(f"Hotkey {hotkey_string} triggered for script {script_name}")
+            self.hotkey_triggered.emit(script_name, hotkey_string)
+        else:
+            logger.warning(f"Unknown hotkey ID triggered: {hotkey_id}")
     
     def validate_hotkey_string(self, hotkey_string: str) -> Tuple[bool, str]:
         """
