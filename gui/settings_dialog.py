@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox,
                              QCheckBox, QComboBox, QLabel, QPushButton,
                              QDialogButtonBox, QMessageBox, QWidget, QTabWidget,
                              QTableWidget, QTableWidgetItem, QHeaderView,
-                             QAbstractItemView)
+                             QAbstractItemView, QFontComboBox, QSpinBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from core.settings import SettingsManager
@@ -107,6 +107,32 @@ class SettingsDialog(QDialog):
         behavior_group.setLayout(behavior_layout)
         layout.addWidget(behavior_group)
         
+        # Appearance Settings Group
+        appearance_group = QGroupBox("Appearance")
+        appearance_layout = QVBoxLayout()
+        
+        # Font family selection
+        font_layout = QHBoxLayout()
+        font_layout.addWidget(QLabel("Font Family:"))
+        self.font_combo = QFontComboBox()
+        self.font_combo.setToolTip("Select the font family for the application")
+        font_layout.addWidget(self.font_combo)
+        appearance_layout.addLayout(font_layout)
+        
+        # Font size selection
+        size_layout = QHBoxLayout()
+        size_layout.addWidget(QLabel("Font Size:"))
+        self.font_size_spinbox = QSpinBox()
+        self.font_size_spinbox.setRange(6, 24)
+        self.font_size_spinbox.setSuffix(" pt")
+        self.font_size_spinbox.setToolTip("Select the font size for the application")
+        size_layout.addWidget(self.font_size_spinbox)
+        size_layout.addStretch()  # Push spinbox to the left
+        appearance_layout.addLayout(size_layout)
+        
+        appearance_group.setLayout(appearance_layout)
+        layout.addWidget(appearance_group)
+        
         # Add stretch to push content to top
         layout.addStretch()
         
@@ -131,6 +157,29 @@ class SettingsDialog(QDialog):
         self.hotkeys_table = QTableWidget()
         self.hotkeys_table.setColumnCount(4)
         self.hotkeys_table.setHorizontalHeaderLabels(["Script", "Description", "Hotkey", "Actions"])
+        
+        # Set table styling for better visibility
+        self.hotkeys_table.setStyleSheet("""
+            QTableWidget {
+                background-color: #2b2b2b;
+                alternate-background-color: #3c3c3c;
+                gridline-color: #555555;
+                color: #ffffff;
+            }
+            QTableWidget::item {
+                padding: 4px;
+                color: #ffffff;
+            }
+            QTableWidget::item:selected {
+                background-color: #0078d4;
+            }
+            QHeaderView::section {
+                background-color: #404040;
+                color: #ffffff;
+                padding: 4px;
+                border: 1px solid #555555;
+            }
+        """)
         
         # Configure table
         self.hotkeys_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -168,6 +217,12 @@ class SettingsDialog(QDialog):
         self.single_instance_checkbox.setChecked(self.settings.get('behavior/single_instance', True))
         self.show_notifications_checkbox.setChecked(self.settings.should_show_notifications())
         
+        # Load appearance settings
+        font_family = self.settings.get_font_family()
+        if font_family != 'System Default':
+            self.font_combo.setCurrentText(font_family)
+        self.font_size_spinbox.setValue(self.settings.get_font_size())
+        
     
     def apply_settings(self):
         try:
@@ -187,6 +242,9 @@ class SettingsDialog(QDialog):
             self.settings.set('behavior/single_instance', self.single_instance_checkbox.isChecked())
             self.settings.set('behavior/show_script_notifications', self.show_notifications_checkbox.isChecked())
             
+            # Save appearance settings
+            self.settings.set_font_family(self.font_combo.currentText())
+            self.settings.set_font_size(self.font_size_spinbox.value())
             
             # Sync settings
             self.settings.sync()
@@ -236,17 +294,22 @@ class SettingsDialog(QDialog):
                 # Script name
                 name_item = QTableWidgetItem(script_name)
                 name_item.setData(Qt.ItemDataRole.UserRole, script)  # Store script reference
+                name_item.setForeground(Qt.GlobalColor.white)
                 self.hotkeys_table.setItem(row_position, 0, name_item)
                 
                 # Description
                 desc_item = QTableWidgetItem(description)
                 desc_item.setToolTip(description)
+                desc_item.setForeground(Qt.GlobalColor.white)
                 self.hotkeys_table.setItem(row_position, 1, desc_item)
                 
                 # Hotkey
                 hotkey_item = QTableWidgetItem(hotkey if hotkey else "(empty)")
                 if not hotkey:
                     hotkey_item.setForeground(Qt.GlobalColor.gray)
+                else:
+                    # Make sure hotkey text is white and visible
+                    hotkey_item.setForeground(Qt.GlobalColor.white)
                 self.hotkeys_table.setItem(row_position, 2, hotkey_item)
                 
                 # Clear button
@@ -301,7 +364,7 @@ class SettingsDialog(QDialog):
                 if hotkey_item:
                     hotkey_item.setText(new_hotkey if new_hotkey else "(empty)")
                     hotkey_item.setForeground(
-                        Qt.GlobalColor.black if new_hotkey else Qt.GlobalColor.gray
+                        Qt.GlobalColor.white if new_hotkey else Qt.GlobalColor.gray
                     )
                 
                 # Mark that hotkeys have changed
