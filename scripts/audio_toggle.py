@@ -274,3 +274,18 @@ class AudioToggle(UtilityScript):
             return len(devices) >= 1
         except:
             return False
+
+
+if __name__ == "__main__":
+    import json as json_module
+    
+    script = AudioToggle()
+    
+    current_status = script.get_status()
+    print(f"Current audio device: {current_status}")
+    
+    print("Toggling audio output device...")
+    result = script.execute()
+    
+    print(json_module.dumps(result, indent=2))
+    sys.exit(0 if result.get('success', False) else 1)

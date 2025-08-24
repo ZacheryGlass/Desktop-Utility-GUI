@@ -176,3 +176,18 @@ class DisplayToggle(UtilityScript):
             return False
         except:
             return False
+
+
+if __name__ == "__main__":
+    import json
+    
+    script = DisplayToggle()
+    
+    current_status = script.get_status()
+    print(f"Current display mode: {current_status}")
+    
+    print("Toggling display mode...")
+    result = script.execute()
+    
+    print(json.dumps(result, indent=2))
+    sys.exit(0 if result.get('success', False) else 1)

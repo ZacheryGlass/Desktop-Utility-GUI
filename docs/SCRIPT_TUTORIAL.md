@@ -870,6 +870,119 @@ if __name__ == "__main__":
     print("Result:", result)
 ```
 
+### Running Scripts Standalone
+
+All utility scripts can be executed directly from the command line without the GUI. This is useful for testing, debugging, or integrating with other automation tools.
+
+#### Standard Implementation
+
+Every script should include a `if __name__ == "__main__":` block for standalone execution:
+
+```python
+if __name__ == "__main__":
+    import json
+    
+    script = MyScript()
+    
+    # Display current status
+    current_status = script.get_status()
+    print(f"Current status: {current_status}")
+    
+    # Execute the script
+    result = script.execute()
+    
+    # Display result as JSON
+    print(json.dumps(result, indent=2))
+    
+    # Exit with appropriate code
+    sys.exit(0 if result.get('success', False) else 1)
+```
+
+#### Examples by Button Type
+
+**RUN Button Scripts:**
+```python
+if __name__ == "__main__":
+    import json
+    
+    script = BluetoothToggle()
+    print(f"Status: {script.get_status()}")
+    print("Executing...")
+    result = script.execute()
+    print(json.dumps(result, indent=2))
+    sys.exit(0 if result.get('success', False) else 1)
+```
+
+**TOGGLE Button Scripts:**
+```python
+if __name__ == "__main__":
+    import json
+    
+    script = DisplayToggle()
+    current = script.get_status()
+    print(f"Current mode: {current}")
+    print("Toggling...")
+    result = script.execute()
+    print(json.dumps(result, indent=2))
+    sys.exit(0 if result.get('success', False) else 1)
+```
+
+**CYCLE Button Scripts:**
+```python
+if __name__ == "__main__":
+    import json
+    
+    script = PowerPlanToggle()
+    
+    # With command line argument
+    if len(sys.argv) > 1:
+        plan_name = sys.argv[1]
+        result = script.execute(plan_name)
+    else:
+        # Auto-cycle to next option
+        current = script.get_status()
+        print(f"Current: {current}")
+        metadata = script.get_metadata()
+        options = metadata['button_options'].options
+        next_index = (options.index(current) + 1) % len(options)
+        next_option = options[next_index]
+        print(f"Switching to: {next_option}")
+        result = script.execute(next_option)
+    
+    print(json.dumps(result, indent=2))
+    sys.exit(0 if result.get('success', False) else 1)
+```
+
+#### Command Line Usage
+
+Run scripts directly from the command line:
+
+```bash
+# Run a script from the scripts directory
+cd scripts
+python display_toggle.py
+
+# Run from project root
+python scripts/power_plan.py
+
+# Pass arguments for cycle scripts
+python scripts/power_plan.py "High performance"
+
+# Use in shell scripts or automation
+if python scripts/bluetooth_reset.py; then
+    echo "Bluetooth reset successful"
+else
+    echo "Bluetooth reset failed"
+fi
+```
+
+This standalone capability allows scripts to be:
+- Tested independently during development
+- Integrated into batch files or shell scripts
+- Called from task schedulers
+- Used in automation workflows
+- Debugged more easily
+
 ## Next Steps
 
 1. **Start Simple**: Begin with a RUN button script

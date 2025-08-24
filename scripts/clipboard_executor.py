@@ -113,3 +113,23 @@ class ClipboardExecutor(UtilityScript):
             return True, "Clipboard accessible"
         except Exception as e:
             return False, f"Cannot access clipboard: {str(e)}"
+
+
+if __name__ == "__main__":
+    import json
+    
+    script = ClipboardExecutor()
+    
+    status = script.get_status()
+    print(f"Status: {status}")
+    
+    print("Executing code from clipboard...")
+    result = script.execute()
+    
+    print(f"Result: {result}")
+    
+    # Exit with appropriate code based on result
+    if "failed" in result.lower() or "error" in result.lower():
+        sys.exit(1)
+    else:
+        sys.exit(0)

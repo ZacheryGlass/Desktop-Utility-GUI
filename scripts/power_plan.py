@@ -117,3 +117,34 @@ class PowerPlanToggle(UtilityScript):
             return result.returncode == 0
         except:
             return False
+
+
+if __name__ == "__main__":
+    import json
+    
+    script = PowerPlanToggle()
+    
+    if len(sys.argv) > 1:
+        plan_name = sys.argv[1]
+        result = script.execute(plan_name)
+    else:
+        current_status = script.get_status()
+        print(f"Current power plan: {current_status}")
+        
+        metadata = script.get_metadata()
+        if 'button_options' in metadata and hasattr(metadata['button_options'], 'options'):
+            options = metadata['button_options'].options
+            print(f"Available plans: {', '.join(options)}")
+            
+            current_index = options.index(current_status) if current_status in options else 0
+            next_index = (current_index + 1) % len(options)
+            next_plan = options[next_index]
+            
+            print(f"Switching to: {next_plan}")
+            result = script.execute(next_plan)
+        else:
+            print("Error: Could not determine available power plans")
+            sys.exit(1)
+    
+    print(json.dumps(result, indent=2))
+    sys.exit(0 if result.get('success', False) else 1)

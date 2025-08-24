@@ -181,3 +181,22 @@ class BluetoothToggle(UtilityScript):
             return result.returncode == 0 and ps_result.returncode == 0
         except:
             return False
+
+
+if __name__ == "__main__":
+    import json
+    
+    script = BluetoothToggle()
+    
+    current_status = script.get_status()
+    print(f"Current Bluetooth status: {current_status}")
+    
+    if current_status == 'Not available':
+        print("Bluetooth is not available on this system")
+        sys.exit(1)
+    
+    print("Starting Bluetooth toggle (will turn off for 10 seconds then back on)...")
+    result = script.execute()
+    
+    print(json.dumps(result, indent=2))
+    sys.exit(0 if result.get('success', False) else 1)
