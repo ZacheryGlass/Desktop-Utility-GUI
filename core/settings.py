@@ -26,6 +26,10 @@ class SettingsManager(QObject):
         'hotkeys': {
             # Hotkey mappings will be stored as 'hotkeys/ScriptName': 'Ctrl+Alt+X'
             # This is just a placeholder for the schema
+        },
+        'appearance': {
+            'font_family': 'System Default',
+            'font_size': 9
         }
     }
     
@@ -114,3 +118,16 @@ class SettingsManager(QObject):
     
     def should_show_notifications(self) -> bool:
         return self.get('behavior/show_script_notifications', True)
+    
+    # Font settings
+    def get_font_family(self) -> str:
+        return self.get('appearance/font_family', 'System Default')
+    
+    def set_font_family(self, font_family: str) -> None:
+        self.set('appearance/font_family', font_family)
+    
+    def get_font_size(self) -> int:
+        return self.get('appearance/font_size', 9)
+    
+    def set_font_size(self, font_size: int) -> None:
+        self.set('appearance/font_size', font_size)

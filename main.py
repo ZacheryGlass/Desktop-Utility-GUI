@@ -5,6 +5,7 @@ import argparse
 from datetime import datetime
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox
 from PyQt6.QtCore import Qt, QSharedMemory, QSystemSemaphore
+from PyQt6.QtGui import QFont
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,6 +29,23 @@ def setup_logging():
     
     logger = logging.getLogger('MAIN')
     return logger
+
+def apply_font_settings(app, settings):
+    """Apply font settings to the application"""
+    font_logger = logging.getLogger('MAIN.Font')
+    font_family = settings.get_font_family()
+    font_size = settings.get_font_size()
+    
+    if font_family and font_family != 'System Default':
+        font = QFont(font_family, font_size)
+        app.setFont(font)
+        font_logger.info(f"Applied custom font: {font_family}, {font_size}pt")
+    else:
+        # Use system default but set the size
+        font = app.font()
+        font.setPointSize(font_size)
+        app.setFont(font)
+        font_logger.info(f"Applied system default font with size: {font_size}pt")
 
 class SingleApplication(QApplication):
     """Ensures only one instance of the application runs"""
@@ -107,6 +125,9 @@ def main():
     app.setStyle("Fusion")
     logger.info(f"Application style set to: Fusion")
     
+    # Apply font settings
+    apply_font_settings(app, settings)
+    
     # Don't quit when last window closes (we have tray icon)
     app.setQuitOnLastWindowClosed(False)
     
@@ -120,11 +141,21 @@ def main():
     # Set script loader for tray manager
     tray_manager.set_script_loader(window.script_loader)
     
+    # Apply initial font settings to tray menu
+    tray_manager.update_font_settings()
+    
     # Connect settings request to window
     tray_manager.settings_requested.connect(window.open_settings)
     
     # Connect hotkey changes to tray manager
     window.hotkeys_changed.connect(tray_manager.refresh_hotkeys)
+    
+    # Connect settings changes to font updates
+    def update_fonts():
+        apply_font_settings(app, settings)
+        tray_manager.update_font_settings()
+    
+    window.settings_changed.connect(update_fonts)
     
     # Handle exit request
     def handle_exit():

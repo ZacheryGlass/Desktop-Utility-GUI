@@ -12,6 +12,7 @@ class MainWindow(QMainWindow):
     """Minimal main window class - only used as parent for settings dialog and script loading"""
     scripts_reloaded = pyqtSignal()
     hotkeys_changed = pyqtSignal()
+    settings_changed = pyqtSignal()
     
     def __init__(self, scripts_directory: str = "scripts"):
         super().__init__()
@@ -49,6 +50,8 @@ class MainWindow(QMainWindow):
     def _on_settings_changed(self):
         """Handle settings changes"""
         logger.info("Settings changed, updating application behavior")
+        # Emit the signal to notify other components (like font settings)
+        self.settings_changed.emit()
     
     def _on_hotkeys_changed(self):
         """Handle hotkey changes"""

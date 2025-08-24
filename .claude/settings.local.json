@@ -9,7 +9,8 @@
       "Bash(rm:*)",
       "Bash(mkdir:*)",
       "WebSearch",
-      "Bash(venv/Scripts/python.exe:*)"
+      "Bash(venv/Scripts/python.exe:*)",
+      "Read(/c:\\Users\\zache\\git\\Desktop_Utility_GUI\\Desktop-Utility-GUI/**)"
     ],
     "deny": [],
     "ask": []
