@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from .base_script import UtilityScript
 from .exceptions import ScriptLoadError
+from .settings import SettingsManager
 
 logger = logging.getLogger('Core.ScriptLoader')
 
@@ -16,6 +17,7 @@ class ScriptLoader:
         self.scripts_directory = Path(scripts_directory)
         self.loaded_scripts: Dict[str, UtilityScript] = {}
         self.failed_scripts: Dict[str, str] = {}
+        self.settings = SettingsManager()
         logger.info(f"ScriptLoader initialized with directory: {self.scripts_directory.absolute()}")
     
     def discover_scripts(self) -> List[UtilityScript]:
@@ -112,3 +114,13 @@ class ScriptLoader:
     
     def get_failed_scripts(self) -> Dict[str, str]:
         return self.failed_scripts.copy()
+    
+    def get_script_display_name(self, script: UtilityScript) -> str:
+        """Get the effective display name for a script (custom name if set, otherwise original)."""
+        try:
+            metadata = script.get_metadata()
+            original_name = metadata.get('name', 'Unknown Script')
+            return self.settings.get_effective_name(original_name)
+        except Exception as e:
+            logger.error(f"Error getting display name for script: {e}")
+            return "Unknown Script"
