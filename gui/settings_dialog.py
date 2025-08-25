@@ -12,6 +12,7 @@ from core.startup_manager import StartupManager
 from core.script_loader import ScriptLoader
 from core.hotkey_registry import HotkeyRegistry
 from gui.hotkey_configurator import HotkeyConfigDialog
+from gui.emoji_picker import EmojiPicker
 
 # UI Theme Constants
 CUSTOM_NAME_COLOR = Qt.GlobalColor.cyan
@@ -49,6 +50,10 @@ class SettingsDialog(QDialog):
         # Create and add Hotkeys tab
         self.hotkeys_tab = self._create_hotkeys_tab()
         self.tab_widget.addTab(self.hotkeys_tab, "Hotkeys")
+        
+        # Create and add Script Icons tab
+        self.icons_tab = self._create_icons_tab()
+        self.tab_widget.addTab(self.icons_tab, "Script Icons")
         
         # Dialog buttons
         button_box = QDialogButtonBox(
@@ -208,6 +213,70 @@ class SettingsDialog(QDialog):
         
         # Load hotkeys
         self._refresh_hotkeys_table()
+        
+        return widget
+    
+    def _create_icons_tab(self) -> QWidget:
+        """Create the Script Icons configuration tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Instructions
+        instructions = QLabel(
+            "Customize emoji icons for scripts in the system tray menu. "
+            "Click on an emoji cell to select a new emoji, or use the 'Set' button. "
+            "Use 'Reset' to restore the default emoji for a script."
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        
+        # Create table for icon configuration
+        self.icons_table = QTableWidget()
+        self.icons_table.setColumnCount(5)
+        self.icons_table.setHorizontalHeaderLabels(["Script", "Current Emoji", "Description", "Actions", "Preview"])
+        
+        # Set table styling similar to hotkeys table
+        self.icons_table.setStyleSheet("""
+            QTableWidget {
+                background-color: #2b2b2b;
+                alternate-background-color: #3c3c3c;
+                gridline-color: #555555;
+                color: #ffffff;
+            }
+            QTableWidget::item {
+                padding: 4px;
+                color: #ffffff;
+            }
+            QTableWidget::item:selected {
+                background-color: #0078d4;
+            }
+            QHeaderView::section {
+                background-color: #404040;
+                color: #ffffff;
+                padding: 4px;
+                border: 1px solid #555555;
+            }
+        """)
+        
+        # Configure table
+        self.icons_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.icons_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.icons_table.horizontalHeader().setStretchLastSection(False)
+        self.icons_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.icons_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.icons_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.icons_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.icons_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        
+        layout.addWidget(self.icons_table)
+        
+        # Refresh button
+        refresh_button = QPushButton("Refresh Scripts")
+        refresh_button.clicked.connect(self._refresh_icons_table)
+        layout.addWidget(refresh_button)
+        
+        # Load icons table
+        self._refresh_icons_table()
         
         return widget
     
@@ -478,3 +547,192 @@ class SettingsDialog(QDialog):
             
             # Mark that hotkeys have changed
             self.hotkeys_changed.emit()
+    
+    def _refresh_icons_table(self):
+        """Refresh the script icons table with current scripts"""
+        self.icons_table.setRowCount(0)
+        
+        if not self.script_loader:
+            return
+        
+        # Get all scripts
+        scripts = self.script_loader.discover_scripts()
+        
+        # Populate table
+        for script in scripts:
+            try:
+                metadata = script.get_metadata()
+                original_name = metadata.get('name', 'Unknown')
+                description = metadata.get('description', '')
+                
+                # Get current emoji (custom or default)
+                current_emoji = self._get_effective_emoji_for_script(original_name)
+                
+                # Add row
+                row_position = self.icons_table.rowCount()
+                self.icons_table.insertRow(row_position)
+                
+                # Script name
+                name_item = QTableWidgetItem(original_name)
+                name_item.setData(Qt.ItemDataRole.UserRole, script)
+                name_item.setForeground(Qt.GlobalColor.white)
+                self.icons_table.setItem(row_position, 0, name_item)
+                
+                # Current emoji (large font for visibility)
+                emoji_item = QTableWidgetItem(current_emoji if current_emoji else "(none)")
+                emoji_item.setForeground(Qt.GlobalColor.white)
+                emoji_item.setToolTip("Click to change emoji")
+                if current_emoji:
+                    font = emoji_item.font()
+                    font.setPointSize(20)
+                    emoji_item.setFont(font)
+                self.icons_table.setItem(row_position, 1, emoji_item)
+                
+                # Description
+                desc_item = QTableWidgetItem(description)
+                desc_item.setToolTip(description)
+                desc_item.setForeground(Qt.GlobalColor.white)
+                self.icons_table.setItem(row_position, 2, desc_item)
+                
+                # Action buttons
+                actions_widget = QWidget()
+                actions_layout = QHBoxLayout(actions_widget)
+                actions_layout.setContentsMargins(2, 2, 2, 2)
+                
+                set_button = QPushButton("Set")
+                set_button.setMaximumWidth(50)
+                set_button.clicked.connect(lambda checked, row=row_position: self._set_script_emoji(row))
+                actions_layout.addWidget(set_button)
+                
+                reset_button = QPushButton("Reset")
+                reset_button.setMaximumWidth(50)
+                reset_button.clicked.connect(lambda checked, row=row_position: self._reset_script_emoji(row))
+                actions_layout.addWidget(reset_button)
+                
+                self.icons_table.setCellWidget(row_position, 3, actions_widget)
+                
+                # Preview (showing what it would look like in tray)
+                display_name = self.script_loader.get_script_display_name(script)
+                preview_text = f"{current_emoji} {display_name}" if current_emoji else display_name
+                preview_item = QTableWidgetItem(preview_text)
+                preview_item.setForeground(Qt.GlobalColor.lightGray)
+                preview_item.setToolTip("Preview of how this will appear in the tray menu")
+                if current_emoji:
+                    font = preview_item.font()
+                    font.setPointSize(10)
+                    preview_item.setFont(font)
+                self.icons_table.setItem(row_position, 4, preview_item)
+                
+            except Exception as e:
+                logger.error(f"Error adding script to icons table: {e}")
+    
+    def _get_effective_emoji_for_script(self, script_name: str) -> str:
+        """Get effective emoji for script (custom or default)"""
+        # First check for custom emoji
+        custom_emoji = self.settings.get_script_emoji(script_name)
+        if custom_emoji:
+            return custom_emoji
+        
+        # Return default emoji based on script name/type
+        return self._get_default_emoji(script_name)
+    
+    def _get_default_emoji(self, script_name: str) -> str:
+        """Get default emoji based on script name"""
+        name_lower = script_name.lower()
+        
+        # Audio related
+        if any(word in name_lower for word in ['audio', 'sound', 'volume', 'speaker', 'microphone']):
+            return '🔊'
+        
+        # Display related  
+        if any(word in name_lower for word in ['display', 'monitor', 'screen', 'resolution']):
+            return '🖥️'
+        
+        # Bluetooth related
+        if any(word in name_lower for word in ['bluetooth', 'bt', 'wireless']):
+            return '📶'
+        
+        # Power related
+        if any(word in name_lower for word in ['power', 'battery', 'energy', 'plan']):
+            return '⚡'
+        
+        # Network related
+        if any(word in name_lower for word in ['network', 'wifi', 'internet', 'connection']):
+            return '🌐'
+        
+        # File/clipboard related
+        if any(word in name_lower for word in ['file', 'clipboard', 'copy', 'paste']):
+            return '📋'
+        
+        # Test/debug related
+        if any(word in name_lower for word in ['test', 'debug', 'sample']):
+            return '🧪'
+        
+        # Default for unknown types
+        return '⚙️'
+    
+    def _set_script_emoji(self, row: int):
+        """Open emoji picker for script"""
+        # Get script info
+        name_item = self.icons_table.item(row, 0)
+        if not name_item:
+            return
+        
+        script_name = name_item.text()
+        current_emoji = self._get_effective_emoji_for_script(script_name)
+        
+        # Show emoji picker
+        picker = EmojiPicker(current_emoji, self)
+        if picker.exec() == QDialog.DialogCode.Accepted:
+            selected_emoji = picker.get_selected_emoji()
+            if selected_emoji:
+                # Save emoji
+                self.settings.set_script_emoji(script_name, selected_emoji)
+                
+                # Update table display
+                self._update_emoji_table_row(row, script_name, selected_emoji)
+                
+                logger.info(f"Set emoji '{selected_emoji}' for script '{script_name}'")
+    
+    def _reset_script_emoji(self, row: int):
+        """Reset script emoji to default"""
+        # Get script info
+        name_item = self.icons_table.item(row, 0)
+        if not name_item:
+            return
+        
+        script_name = name_item.text()
+        
+        # Remove custom emoji
+        self.settings.remove_script_emoji(script_name)
+        
+        # Get default emoji
+        default_emoji = self._get_default_emoji(script_name)
+        
+        # Update table display
+        self._update_emoji_table_row(row, script_name, default_emoji)
+        
+        logger.info(f"Reset emoji for script '{script_name}' to default '{default_emoji}'")
+    
+    def _update_emoji_table_row(self, row: int, script_name: str, emoji: str):
+        """Update a table row with new emoji"""
+        # Update emoji column
+        emoji_item = self.icons_table.item(row, 1)
+        if emoji_item:
+            emoji_item.setText(emoji)
+            if emoji:
+                font = emoji_item.font()
+                font.setPointSize(20)
+                emoji_item.setFont(font)
+        
+        # Update preview column
+        preview_item = self.icons_table.item(row, 4)
+        if preview_item:
+            # Get script for display name
+            name_item = self.icons_table.item(row, 0)
+            if name_item:
+                script = name_item.data(Qt.ItemDataRole.UserRole)
+                if script:
+                    display_name = self.script_loader.get_script_display_name(script)
+                    preview_text = f"{emoji} {display_name}" if emoji else display_name
+                    preview_item.setText(preview_text)
