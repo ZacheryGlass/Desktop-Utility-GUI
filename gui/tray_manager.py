@@ -112,6 +112,31 @@ class TrayManager(QObject):
         # Default for unknown types
         return '⚙️'
     
+    def _get_argument_status_indicator(self, script: UtilityScript, original_name: str) -> str:
+        """Get visual indicator for script argument configuration status"""
+        try:
+            arg_info = self.script_loader.get_script_argument_info(script)
+            
+            if not arg_info['supports_arguments']:
+                return ""  # No indicator needed
+            
+            if arg_info['needs_configuration']:
+                # Check if script has configured presets
+                presets = self.settings.get_script_argument_presets(original_name)
+                active_preset = self.settings.get_enabled_preset_for_script(original_name)
+                
+                if active_preset:
+                    return " ✓"  # Configured and has active preset
+                elif presets:
+                    return " ⚠"  # Has presets but none active
+                else:
+                    return " ⚠"  # Needs configuration
+            else:
+                # Script supports arguments but doesn't require explicit configuration
+                return " 🔧"  # Configurable
+        except Exception:
+            return ""
+    
     def _create_tray_icon(self):
         # Create a simple icon programmatically
         pixmap = QPixmap(64, 64)
@@ -215,23 +240,30 @@ class TrayManager(QObject):
                     # Store script instance by original name for hotkey execution (hotkeys use original names)
                     self.script_name_to_instance[original_name] = script
                     
-                    if button_type == ButtonType.RUN:
-                        self._add_run_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.TOGGLE:
-                        self._add_toggle_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.CYCLE:
-                        self._add_cycle_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.SELECT:
-                        self._add_select_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.NUMBER:
-                        self._add_number_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.TEXT_INPUT:
-                        self._add_text_input_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.SLIDER:
-                        logger.info(f"Skipping deprecated SLIDER script: {display_name}")
-                        continue
+                    # Check if script has multiple argument presets
+                    presets = self.settings.get_script_argument_presets(original_name)
+                    if len(presets) > 1:
+                        # Create submenu for multiple presets
+                        self._add_multi_preset_script(script, original_name, display_name, metadata, presets)
                     else:
-                        self._add_run_script(script, original_name, display_name, metadata)
+                        # Handle normally based on button type
+                        if button_type == ButtonType.RUN:
+                            self._add_run_script(script, original_name, display_name, metadata)
+                        elif button_type == ButtonType.TOGGLE:
+                            self._add_toggle_script(script, original_name, display_name, metadata)
+                        elif button_type == ButtonType.CYCLE:
+                            self._add_cycle_script(script, original_name, display_name, metadata)
+                        elif button_type == ButtonType.SELECT:
+                            self._add_select_script(script, original_name, display_name, metadata)
+                        elif button_type == ButtonType.NUMBER:
+                            self._add_number_script(script, original_name, display_name, metadata)
+                        elif button_type == ButtonType.TEXT_INPUT:
+                            self._add_text_input_script(script, original_name, display_name, metadata)
+                        elif button_type == ButtonType.SLIDER:
+                            logger.info(f"Skipping deprecated SLIDER script: {display_name}")
+                            continue
+                        else:
+                            self._add_run_script(script, original_name, display_name, metadata)
                         
                 except Exception as e:
                     logger.error(f"Error adding script to tray menu: {e}")
@@ -255,17 +287,31 @@ class TrayManager(QObject):
         emoji = self._get_effective_emoji_for_script(original_name)
         emoji_prefix = f"{emoji} " if emoji else ""
         
+        # Get argument status indicator
+        arg_indicator = self._get_argument_status_indicator(script, original_name)
+        
         # Get hotkey for this script (using original name)
         hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            menu_text = f"{emoji_prefix}{display_name}\t│ {hotkey}"
+            menu_text = f"{emoji_prefix}{display_name}{arg_indicator}\t│ {hotkey}"
         else:
-            menu_text = f"{emoji_prefix}{display_name}"
+            menu_text = f"{emoji_prefix}{display_name}{arg_indicator}"
         
         action = QAction(menu_text, self)
-        action.setToolTip(metadata.get('description', ''))
-        action.triggered.connect(lambda checked, s=script: self._execute_script(s))
+        
+        # Enhanced tooltip with argument info
+        tooltip = metadata.get('description', '')
+        if arg_indicator:
+            if arg_indicator == " ✓":
+                tooltip += " | Arguments: Configured"
+            elif arg_indicator == " ⚠":
+                tooltip += " | Arguments: Needs Configuration"
+            elif arg_indicator == " 🔧":
+                tooltip += " | Arguments: Configurable"
+        action.setToolTip(tooltip)
+        
+        action.triggered.connect(lambda checked, s=script: self._execute_script_with_arguments(s, original_name))
         
         self.script_actions[action] = script
         self.context_menu.addAction(action)
@@ -276,17 +322,31 @@ class TrayManager(QObject):
         emoji = self._get_effective_emoji_for_script(original_name)
         emoji_prefix = f"{emoji} " if emoji else ""
         
+        # Get argument status indicator
+        arg_indicator = self._get_argument_status_indicator(script, original_name)
+        
         # Get hotkey for this script (using original name)
         hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            menu_text = f"{emoji_prefix}{display_name}\t│ {hotkey}"
+            menu_text = f"{emoji_prefix}{display_name}{arg_indicator}\t│ {hotkey}"
         else:
-            menu_text = f"{emoji_prefix}{display_name}"
+            menu_text = f"{emoji_prefix}{display_name}{arg_indicator}"
         
         action = QAction(menu_text, self)
-        action.setToolTip(f"{metadata.get('description', '')} (Click to toggle)")
-        action.triggered.connect(lambda checked, s=script: self._execute_toggle_script(s))
+        
+        # Enhanced tooltip with argument info
+        tooltip = f"{metadata.get('description', '')} (Click to toggle)"
+        if arg_indicator:
+            if arg_indicator == " ✓":
+                tooltip += " | Arguments: Configured"
+            elif arg_indicator == " ⚠":
+                tooltip += " | Arguments: Needs Configuration"
+            elif arg_indicator == " 🔧":
+                tooltip += " | Arguments: Configurable"
+        action.setToolTip(tooltip)
+        
+        action.triggered.connect(lambda checked, s=script: self._execute_toggle_script_with_arguments(s, original_name))
         
         self.script_actions[action] = script
         self.context_menu.addAction(action)
@@ -423,6 +483,161 @@ class TrayManager(QObject):
         self.script_actions[action] = script
         self.context_menu.addAction(action)
     
+    def _add_multi_preset_script(self, script: UtilityScript, original_name: str, 
+                                display_name: str, metadata: dict, presets: dict):
+        """Add a script with multiple argument presets as a submenu"""
+        # Get emoji for this script
+        emoji = self._get_effective_emoji_for_script(original_name)
+        emoji_prefix = f"{emoji} " if emoji else ""
+        
+        # Get argument status indicator (should show configured since we have presets)
+        arg_indicator = " ✓"
+        
+        # Get hotkey for this script (using original name)
+        hotkey = self.hotkey_registry.get_hotkey(original_name)
+        if hotkey:
+            # Use tab character for alignment in monospace font, with visual formatting
+            submenu_title = f"{emoji_prefix}{display_name}{arg_indicator}\t│ {hotkey}"
+        else:
+            submenu_title = f"{emoji_prefix}{display_name}{arg_indicator}"
+        
+        # Create submenu
+        submenu = QMenu(submenu_title, self.context_menu)
+        submenu.setToolTip(f"{metadata.get('description', '')} | Multiple presets available")
+        
+        # Add preset options
+        for preset_name, preset_data in presets.items():
+            preset_action = QAction(f"{preset_name}", self)
+            
+            # Mark active preset with checkmark
+            is_active = preset_data.get('enabled', False)
+            if is_active:
+                preset_action.setCheckable(True)
+                preset_action.setChecked(True)
+            
+            # Add description to tooltip if available
+            description = preset_data.get('description', '')
+            args_str = str(preset_data.get('args', []))
+            if description:
+                preset_action.setToolTip(f"{description} | Args: {args_str}")
+            else:
+                preset_action.setToolTip(f"Args: {args_str}")
+            
+            # Connect to execute with specific preset
+            preset_action.triggered.connect(
+                lambda checked, s=script, sn=original_name, pn=preset_name: 
+                self._execute_script_with_preset(s, sn, pn)
+            )
+            
+            submenu.addAction(preset_action)
+        
+        # Add separator and configure option
+        submenu.addSeparator()
+        configure_action = QAction("Configure Arguments...", self)
+        configure_action.triggered.connect(
+            lambda checked, sn=original_name: self._open_arguments_configuration(sn)
+        )
+        submenu.addAction(configure_action)
+        
+        # Store the submenu for updates
+        self.script_menus[script] = submenu
+        self.context_menu.addMenu(submenu)
+    
+    def _execute_script_with_preset(self, script: UtilityScript, script_name: str, preset_name: str):
+        """Execute script with a specific preset"""
+        try:
+            # Get the specific preset
+            presets = self.settings.get_script_argument_presets(script_name)
+            if preset_name not in presets:
+                logger.error(f"Preset '{preset_name}' not found for script '{script_name}'")
+                return
+            
+            preset_data = presets[preset_name]
+            args = preset_data.get('args', [])
+            
+            logger.info(f"Executing script '{script_name}' with preset '{preset_name}': {args}")
+            
+            # For toggle scripts, handle state appropriately
+            metadata = script.get_metadata()
+            button_type = metadata.get('button_type')
+            
+            if button_type == ButtonType.TOGGLE:
+                # Determine current state and toggle
+                status = script.get_status()
+                current_state = status and status.lower() in ['on', 'enabled', 'true', 'active']
+                self._execute_script(script, not current_state, *args)
+            else:
+                # Execute with preset arguments
+                self._execute_script(script, *args)
+                
+        except Exception as e:
+            logger.error(f"Error executing script with preset: {e}")
+            if self.settings.should_show_notifications():
+                self.show_notification(
+                    "Script Error",
+                    f"Failed to execute '{script_name}' with preset '{preset_name}': {str(e)}",
+                    QSystemTrayIcon.MessageIcon.Critical
+                )
+    
+    def _open_arguments_configuration(self, script_name: str):
+        """Open the settings dialog to the script arguments tab"""
+        try:
+            # Import here to avoid circular imports
+            from .settings_dialog import SettingsDialog
+            
+            # Create and show settings dialog on the arguments tab
+            settings_dialog = SettingsDialog(self.script_loader, self.parent)
+            settings_dialog.tab_widget.setCurrentIndex(3)  # Arguments tab (0=General, 1=Hotkeys, 2=Icons, 3=Arguments)
+            settings_dialog.exec()
+            
+            # Refresh scripts after settings dialog closes
+            self.update_scripts()
+            
+        except Exception as e:
+            logger.error(f"Error opening arguments configuration: {e}")
+            if self.settings.should_show_notifications():
+                self.show_notification(
+                    "Configuration Error",
+                    f"Failed to open arguments configuration: {str(e)}",
+                    QSystemTrayIcon.MessageIcon.Warning
+                )
+    
+    def _execute_script_with_arguments(self, script: UtilityScript, script_name: str):
+        """Execute script with configured arguments if available"""
+        try:
+            # Check if script supports arguments and get active preset
+            arg_info = self.script_loader.get_script_argument_info(script)
+            
+            if arg_info['supports_arguments'] and arg_info['needs_configuration']:
+                # Get active preset
+                active_preset = self.settings.get_enabled_preset_for_script(script_name)
+                
+                if active_preset:
+                    # Execute with preset arguments
+                    logger.info(f"Executing script '{script_name}' with preset '{active_preset['name']}': {active_preset['args']}")
+                    self._execute_script(script, *active_preset['args'])
+                else:
+                    # No active preset - show warning
+                    if self.settings.should_show_notifications():
+                        self.show_notification(
+                            "Script Configuration Needed",
+                            f"Script '{script_name}' requires arguments but no preset is active. Please configure in Settings.",
+                            QSystemTrayIcon.MessageIcon.Warning
+                        )
+                    logger.warning(f"Script '{script_name}' needs arguments but no active preset found")
+            else:
+                # Execute normally
+                self._execute_script(script)
+                
+        except Exception as e:
+            logger.error(f"Error executing script with arguments: {e}")
+            if self.settings.should_show_notifications():
+                self.show_notification(
+                    "Script Error",
+                    str(e),
+                    QSystemTrayIcon.MessageIcon.Critical
+                )
+    
     def _execute_script(self, script: UtilityScript, *args, **kwargs):
         try:
             metadata = script.get_metadata()
@@ -458,6 +673,45 @@ class TrayManager(QObject):
             
         except Exception as e:
             logger.error(f"Error executing script from tray: {e}")
+            if self.settings.should_show_notifications():
+                self.show_notification(
+                    "Script Error",
+                    str(e),
+                    QSystemTrayIcon.MessageIcon.Critical
+                )
+    
+    def _execute_toggle_script_with_arguments(self, script: UtilityScript, script_name: str):
+        """Execute a toggle script with configured arguments if available"""
+        try:
+            # Check if script supports arguments and get active preset
+            arg_info = self.script_loader.get_script_argument_info(script)
+            
+            if arg_info['supports_arguments'] and arg_info['needs_configuration']:
+                # Get active preset
+                active_preset = self.settings.get_enabled_preset_for_script(script_name)
+                
+                if active_preset:
+                    # For toggle scripts, we still need to determine the current state
+                    status = script.get_status()
+                    current_state = status and status.lower() in ['on', 'enabled', 'true', 'active']
+                    # Execute with preset arguments plus the toggle state
+                    logger.info(f"Executing toggle script '{script_name}' with preset '{active_preset['name']}' and state {not current_state}")
+                    self._execute_script(script, not current_state, *active_preset['args'])
+                else:
+                    # No active preset - show warning
+                    if self.settings.should_show_notifications():
+                        self.show_notification(
+                            "Script Configuration Needed",
+                            f"Toggle script '{script_name}' requires arguments but no preset is active. Please configure in Settings.",
+                            QSystemTrayIcon.MessageIcon.Warning
+                        )
+                    logger.warning(f"Toggle script '{script_name}' needs arguments but no active preset found")
+            else:
+                # Execute normally
+                self._execute_toggle_script(script)
+                
+        except Exception as e:
+            logger.error(f"Error executing toggle script with arguments: {e}")
             if self.settings.should_show_notifications():
                 self.show_notification(
                     "Script Error",
@@ -589,19 +843,20 @@ class TrayManager(QObject):
             processed_scripts.add(script)
             
             try:
-                # Update submenu title to show emoji and hotkey with alignment
+                # Update submenu title to show emoji, argument indicator, and hotkey with alignment
                 metadata = script.get_metadata()
                 original_name = metadata.get('name', 'Unknown Script')
                 display_name = self.script_loader.get_script_display_name(script)
                 emoji = self._get_effective_emoji_for_script(original_name)
                 emoji_prefix = f"{emoji} " if emoji else ""
+                arg_indicator = self._get_argument_status_indicator(script, original_name)
                 
                 hotkey = self.hotkey_registry.get_hotkey(original_name)
                 if hotkey:
                     # Use tab character for alignment in monospace font
-                    submenu_title = f"{emoji_prefix}{display_name}\t│ {hotkey}"
+                    submenu_title = f"{emoji_prefix}{display_name}{arg_indicator}\t│ {hotkey}"
                 else:
-                    submenu_title = f"{emoji_prefix}{display_name}"
+                    submenu_title = f"{emoji_prefix}{display_name}{arg_indicator}"
                 submenu.setTitle(submenu_title)
                 
                 # Update option checkmarks based on current status
@@ -627,16 +882,17 @@ class TrayManager(QObject):
                 display_name = self.script_loader.get_script_display_name(script)
                 button_type = metadata.get('button_type', ButtonType.RUN)
                 
-                # Update action text to show emoji and hotkey with alignment
+                # Update action text to show emoji, argument indicator, and hotkey with alignment
                 emoji = self._get_effective_emoji_for_script(original_name)
                 emoji_prefix = f"{emoji} " if emoji else ""
+                arg_indicator = self._get_argument_status_indicator(script, original_name)
                 
                 hotkey = self.hotkey_registry.get_hotkey(original_name)
                 if hotkey:
                     # Use tab character for alignment in monospace font, with visual formatting
-                    action.setText(f"{emoji_prefix}{display_name}\t│ {hotkey}")
+                    action.setText(f"{emoji_prefix}{display_name}{arg_indicator}\t│ {hotkey}")
                 else:
-                    action.setText(f"{emoji_prefix}{display_name}")
+                    action.setText(f"{emoji_prefix}{display_name}{arg_indicator}")
                 processed_scripts.add(script)
                         
             except Exception as e:

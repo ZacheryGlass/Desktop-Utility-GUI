@@ -55,6 +55,10 @@ class SettingsDialog(QDialog):
         self.icons_tab = self._create_icons_tab()
         self.tab_widget.addTab(self.icons_tab, "Script Icons")
         
+        # Create and add Script Arguments tab
+        self.arguments_tab = self._create_arguments_tab()
+        self.tab_widget.addTab(self.arguments_tab, "Script Arguments")
+        
         # Dialog buttons
         button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | 
@@ -277,6 +281,79 @@ class SettingsDialog(QDialog):
         
         # Load icons table
         self._refresh_icons_table()
+        
+        return widget
+    
+    def _create_arguments_tab(self) -> QWidget:
+        """Create the Script Arguments configuration tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Instructions
+        instructions = QLabel(
+            "Configure input arguments for scripts that support them. "
+            "Scripts with declared arguments can have multiple presets configured. "
+            "Enable a preset to make it active for script execution."
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        
+        # Create table for script arguments configuration
+        self.arguments_table = QTableWidget()
+        self.arguments_table.setColumnCount(6)
+        self.arguments_table.setHorizontalHeaderLabels([
+            "Script", "Status", "Argument Support", "Active Preset", "Actions", "Preview"
+        ])
+        
+        # Set table styling similar to other tables
+        self.arguments_table.setStyleSheet("""
+            QTableWidget {
+                background-color: #2b2b2b;
+                alternate-background-color: #3c3c3c;
+                gridline-color: #555555;
+                color: #ffffff;
+            }
+            QTableWidget::item {
+                padding: 4px;
+                color: #ffffff;
+            }
+            QTableWidget::item:selected {
+                background-color: #0078d4;
+            }
+            QHeaderView::section {
+                background-color: #404040;
+                color: #ffffff;
+                padding: 4px;
+                border: 1px solid #555555;
+            }
+        """)
+        
+        # Configure table
+        self.arguments_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.arguments_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.arguments_table.horizontalHeader().setStretchLastSection(False)
+        self.arguments_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.arguments_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.arguments_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.arguments_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.arguments_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.arguments_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        
+        layout.addWidget(self.arguments_table)
+        
+        # Buttons layout
+        buttons_layout = QHBoxLayout()
+        
+        refresh_button = QPushButton("Refresh Scripts")
+        refresh_button.clicked.connect(self._refresh_arguments_table)
+        buttons_layout.addWidget(refresh_button)
+        
+        buttons_layout.addStretch()  # Push buttons to the left
+        
+        layout.addLayout(buttons_layout)
+        
+        # Load arguments table
+        self._refresh_arguments_table()
         
         return widget
     
@@ -736,3 +813,191 @@ class SettingsDialog(QDialog):
                     display_name = self.script_loader.get_script_display_name(script)
                     preview_text = f"{emoji} {display_name}" if emoji else display_name
                     preview_item.setText(preview_text)
+    
+    def _refresh_arguments_table(self):
+        """Refresh the script arguments table with current scripts"""
+        self.arguments_table.setRowCount(0)
+        
+        if not self.script_loader:
+            return
+        
+        # Get all scripts and their argument information
+        scripts = self.script_loader.discover_scripts()
+        
+        # Populate table with all scripts, but highlight those supporting arguments
+        for script in scripts:
+            try:
+                arg_info = self.script_loader.get_script_argument_info(script)
+                original_name = arg_info['name']
+                
+                # Add row
+                row_position = self.arguments_table.rowCount()
+                self.arguments_table.insertRow(row_position)
+                
+                # Script name
+                name_item = QTableWidgetItem(original_name)
+                name_item.setData(Qt.ItemDataRole.UserRole, script)
+                name_item.setForeground(Qt.GlobalColor.white)
+                self.arguments_table.setItem(row_position, 0, name_item)
+                
+                # Status (configured/needs config/not supported)
+                status_item = self._create_status_item(arg_info)
+                self.arguments_table.setItem(row_position, 1, status_item)
+                
+                # Argument support info
+                support_item = self._create_support_item(arg_info)
+                self.arguments_table.setItem(row_position, 2, support_item)
+                
+                # Active preset
+                preset_item = self._create_preset_item(original_name, arg_info)
+                self.arguments_table.setItem(row_position, 3, preset_item)
+                
+                # Action buttons
+                if arg_info['supports_arguments']:
+                    actions_widget = self._create_actions_widget(row_position, original_name, arg_info)
+                    self.arguments_table.setCellWidget(row_position, 4, actions_widget)
+                else:
+                    # Empty cell for scripts that don't support arguments
+                    empty_item = QTableWidgetItem("")
+                    empty_item.setForeground(Qt.GlobalColor.gray)
+                    self.arguments_table.setItem(row_position, 4, empty_item)
+                
+                # Preview
+                preview_item = self._create_preview_item(original_name, arg_info)
+                self.arguments_table.setItem(row_position, 5, preview_item)
+                
+            except Exception as e:
+                logger.error(f"Error adding script to arguments table: {e}")
+    
+    def _create_status_item(self, arg_info: Dict[str, Any]) -> QTableWidgetItem:
+        """Create status column item based on argument info"""
+        if not arg_info['supports_arguments']:
+            item = QTableWidgetItem("Not Supported")
+            item.setForeground(Qt.GlobalColor.gray)
+        elif arg_info['needs_configuration']:
+            # Check if any presets are configured
+            script_name = arg_info['name']
+            presets = self.settings.get_script_argument_presets(script_name)
+            if presets:
+                item = QTableWidgetItem("Configured")
+                item.setForeground(Qt.GlobalColor.green)
+            else:
+                item = QTableWidgetItem("Needs Config")
+                item.setForeground(Qt.GlobalColor.yellow)
+        else:
+            item = QTableWidgetItem("Detected")
+            item.setForeground(Qt.GlobalColor.cyan)
+        
+        return item
+    
+    def _create_support_item(self, arg_info: Dict[str, Any]) -> QTableWidgetItem:
+        """Create argument support column item"""
+        if arg_info['explicit_spec'].supports_arguments:
+            support_text = "Declared"
+        elif arg_info['detected_patterns']:
+            support_text = f"Detected: {', '.join(arg_info['detected_patterns'])}"
+        else:
+            support_text = "None"
+        
+        item = QTableWidgetItem(support_text)
+        item.setToolTip(support_text)
+        item.setForeground(Qt.GlobalColor.white)
+        return item
+    
+    def _create_preset_item(self, script_name: str, arg_info: Dict[str, Any]) -> QTableWidgetItem:
+        """Create active preset column item"""
+        if not arg_info['supports_arguments']:
+            item = QTableWidgetItem("-")
+            item.setForeground(Qt.GlobalColor.gray)
+            return item
+        
+        # Get active preset
+        active_preset = self.settings.get_enabled_preset_for_script(script_name)
+        if active_preset:
+            item = QTableWidgetItem(active_preset['name'])
+            item.setForeground(Qt.GlobalColor.green)
+            item.setToolTip(f"Args: {active_preset['args']}")
+        else:
+            item = QTableWidgetItem("(none)")
+            item.setForeground(Qt.GlobalColor.gray)
+        
+        return item
+    
+    def _create_actions_widget(self, row: int, script_name: str, arg_info: Dict[str, Any]) -> QWidget:
+        """Create actions widget with buttons for script argument management"""
+        actions_widget = QWidget()
+        actions_layout = QHBoxLayout(actions_widget)
+        actions_layout.setContentsMargins(2, 2, 2, 2)
+        
+        # Configure button (always available for scripts supporting arguments)
+        configure_button = QPushButton("Configure")
+        configure_button.setMaximumWidth(80)
+        configure_button.clicked.connect(lambda checked, r=row: self._configure_script_arguments(r))
+        actions_layout.addWidget(configure_button)
+        
+        # Clear button (only if presets exist)
+        presets = self.settings.get_script_argument_presets(script_name)
+        if presets:
+            clear_button = QPushButton("Clear")
+            clear_button.setMaximumWidth(50)
+            clear_button.clicked.connect(lambda checked, r=row: self._clear_script_arguments(r))
+            actions_layout.addWidget(clear_button)
+        
+        return actions_widget
+    
+    def _create_preview_item(self, script_name: str, arg_info: Dict[str, Any]) -> QTableWidgetItem:
+        """Create preview column item showing how the script will appear"""
+        if not arg_info['supports_arguments']:
+            preview_text = "Script runs without arguments"
+        else:
+            active_preset = self.settings.get_enabled_preset_for_script(script_name)
+            if active_preset:
+                preview_text = f"Will run with: {active_preset['args']}"
+            else:
+                preview_text = "No active preset - script may not run properly"
+        
+        item = QTableWidgetItem(preview_text)
+        item.setForeground(Qt.GlobalColor.lightGray)
+        item.setToolTip(preview_text)
+        return item
+    
+    def _configure_script_arguments(self, row: int):
+        """Open configuration dialog for script arguments"""
+        name_item = self.arguments_table.item(row, 0)
+        if not name_item:
+            return
+        
+        script_name = name_item.text()
+        script = name_item.data(Qt.ItemDataRole.UserRole)
+        
+        # Show configuration dialog
+        from .script_arguments_dialog import ScriptArgumentsDialog
+        dialog = ScriptArgumentsDialog(script_name, script, self.settings, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Refresh the table to show updated information
+            self._refresh_arguments_table()
+    
+    def _clear_script_arguments(self, row: int):
+        """Clear all argument presets for a script"""
+        name_item = self.arguments_table.item(row, 0)
+        if not name_item:
+            return
+        
+        script_name = name_item.text()
+        
+        # Confirm with user
+        from PyQt6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, 
+            "Clear Arguments",
+            f"Remove all argument presets for '{script_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            if self.settings.clear_script_arguments(script_name):
+                logger.info(f"Cleared all arguments for script '{script_name}'")
+                # Refresh the table
+                self._refresh_arguments_table()
+            else:
+                QMessageBox.warning(self, "Error", "Failed to clear script arguments.")

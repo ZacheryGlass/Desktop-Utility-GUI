@@ -1,6 +1,7 @@
 import logging
 import re
-from typing import Any, Optional, Dict
+import json
+from typing import Any, Optional, Dict, List
 from PyQt6.QtCore import QSettings, QObject, pyqtSignal
 
 logger = logging.getLogger('Core.Settings')
@@ -38,6 +39,11 @@ class SettingsManager(QObject):
         },
         'emoji_icons': {
             # Script emoji icons will be stored as 'emoji_icons/ScriptName': '🔊'
+            # This is just a placeholder for the schema
+        },
+        'script_arguments': {
+            # Script argument presets will be stored as nested structure:
+            # 'script_arguments/ScriptName/PresetName': {'args': [...], 'enabled': True}
             # This is just a placeholder for the schema
         }
     }
@@ -271,3 +277,151 @@ class SettingsManager(QObject):
     def get_effective_emoji(self, script_name: str) -> Optional[str]:
         """Get the effective emoji for a script (custom if set, otherwise None for default logic)."""
         return self.get_script_emoji(script_name)
+    
+    # Script arguments methods
+    def get_script_argument_presets(self, script_name: str) -> Dict[str, Dict[str, Any]]:
+        """Get all argument presets for a script as {preset_name: preset_data}"""
+        result = {}
+        self.settings.beginGroup(f'script_arguments/{script_name}')
+        try:
+            for preset_name in self.settings.allKeys():
+                preset_data_str = self.settings.value(preset_name, '{}')
+                try:
+                    preset_data = json.loads(preset_data_str) if isinstance(preset_data_str, str) else preset_data_str
+                    result[preset_name] = preset_data
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(f"Invalid preset data for {script_name}/{preset_name}")
+                    continue
+        finally:
+            self.settings.endGroup()
+        return result
+    
+    def set_script_argument_preset(self, script_name: str, preset_name: str, 
+                                   arguments: List[Any], enabled: bool = True, 
+                                   description: str = "") -> bool:
+        """Set an argument preset for a script"""
+        try:
+            preset_data = {
+                'args': arguments,
+                'enabled': enabled,
+                'description': description
+            }
+            
+            key = f'script_arguments/{script_name}/{preset_name}'
+            preset_data_str = json.dumps(preset_data)
+            self.set(key, preset_data_str)
+            
+            logger.info(f"Set argument preset '{preset_name}' for script '{script_name}'")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set argument preset: {e}")
+            return False
+    
+    def remove_script_argument_preset(self, script_name: str, preset_name: str) -> bool:
+        """Remove an argument preset for a script"""
+        try:
+            key = f'script_arguments/{script_name}/{preset_name}'
+            if self.settings.contains(key):
+                self.settings.remove(key)
+                self.settings.sync()
+                logger.info(f"Removed argument preset '{preset_name}' for script '{script_name}'")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to remove argument preset: {e}")
+            return False
+    
+    def get_all_script_arguments(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        """Get all script argument configurations as {script_name: {preset_name: preset_data}}"""
+        result = {}
+        self.settings.beginGroup('script_arguments')
+        try:
+            for script_name in self.settings.childGroups():
+                result[script_name] = self.get_script_argument_presets(script_name)
+        finally:
+            self.settings.endGroup()
+        return result
+    
+    def get_enabled_preset_for_script(self, script_name: str) -> Optional[Dict[str, Any]]:
+        """Get the first enabled preset for a script, or None if no enabled presets"""
+        presets = self.get_script_argument_presets(script_name)
+        for preset_name, preset_data in presets.items():
+            if preset_data.get('enabled', False):
+                return {
+                    'name': preset_name,
+                    'args': preset_data.get('args', []),
+                    'description': preset_data.get('description', '')
+                }
+        return None
+    
+    def get_script_preset_names(self, script_name: str) -> List[str]:
+        """Get list of preset names for a script"""
+        presets = self.get_script_argument_presets(script_name)
+        return list(presets.keys())
+    
+    def enable_script_preset(self, script_name: str, preset_name: str, exclusive: bool = True) -> bool:
+        """Enable a preset for a script. If exclusive=True, disables other presets."""
+        try:
+            presets = self.get_script_argument_presets(script_name)
+            
+            if preset_name not in presets:
+                logger.warning(f"Preset '{preset_name}' not found for script '{script_name}'")
+                return False
+            
+            # If exclusive, disable all other presets first
+            if exclusive:
+                for other_preset_name, preset_data in presets.items():
+                    if other_preset_name != preset_name and preset_data.get('enabled', False):
+                        preset_data['enabled'] = False
+                        self.set_script_argument_preset(
+                            script_name, other_preset_name, 
+                            preset_data.get('args', []), 
+                            False, 
+                            preset_data.get('description', '')
+                        )
+            
+            # Enable the target preset
+            target_preset = presets[preset_name]
+            return self.set_script_argument_preset(
+                script_name, preset_name,
+                target_preset.get('args', []),
+                True,
+                target_preset.get('description', '')
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to enable preset: {e}")
+            return False
+    
+    def disable_script_preset(self, script_name: str, preset_name: str) -> bool:
+        """Disable a preset for a script"""
+        try:
+            presets = self.get_script_argument_presets(script_name)
+            
+            if preset_name not in presets:
+                return False
+            
+            preset_data = presets[preset_name]
+            return self.set_script_argument_preset(
+                script_name, preset_name,
+                preset_data.get('args', []),
+                False,
+                preset_data.get('description', '')
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to disable preset: {e}")
+            return False
+    
+    def clear_script_arguments(self, script_name: str) -> bool:
+        """Remove all argument presets for a script"""
+        try:
+            self.settings.beginGroup(f'script_arguments')
+            self.settings.remove(script_name)
+            self.settings.endGroup()
+            self.settings.sync()
+            logger.info(f"Cleared all argument presets for script '{script_name}'")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to clear script arguments: {e}")
+            return False

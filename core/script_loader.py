@@ -1,11 +1,13 @@
 import os
 import sys
+import ast
+import re
 import importlib.util
 import traceback
 import logging
 from pathlib import Path
-from typing import List, Optional, Dict, Any
-from .base_script import UtilityScript
+from typing import List, Optional, Dict, Any, Set
+from .base_script import UtilityScript, ScriptArgumentsSpec, ArgumentSpec, ArgumentType
 from .exceptions import ScriptLoadError
 from .settings import SettingsManager
 
@@ -124,3 +126,176 @@ class ScriptLoader:
         except Exception as e:
             logger.error(f"Error getting display name for script: {e}")
             return "Unknown Script"
+    
+    def get_script_argument_info(self, script: UtilityScript) -> Dict[str, Any]:
+        """Get comprehensive argument information for a script"""
+        try:
+            metadata = script.get_metadata()
+            original_name = metadata.get('name', 'Unknown Script')
+            
+            # Get explicit argument specification
+            explicit_spec = script.get_arguments_spec()
+            
+            # Also try to detect arguments from the script file
+            script_file_path = self._find_script_file(original_name)
+            detected_patterns = self._detect_argument_patterns(script_file_path) if script_file_path else set()
+            
+            return {
+                'name': original_name,
+                'explicit_spec': explicit_spec,
+                'detected_patterns': detected_patterns,
+                'supports_arguments': explicit_spec.supports_arguments or len(detected_patterns) > 0,
+                'needs_configuration': explicit_spec.supports_arguments and len(explicit_spec.arguments) > 0
+            }
+        except Exception as e:
+            logger.error(f"Error getting argument info for script: {e}")
+            return {
+                'name': 'Unknown Script',
+                'explicit_spec': ScriptArgumentsSpec(),
+                'detected_patterns': set(),
+                'supports_arguments': False,
+                'needs_configuration': False
+            }
+    
+    def _find_script_file(self, script_name: str) -> Optional[Path]:
+        """Find the file path for a script by name"""
+        for script_file in self.scripts_directory.glob("*.py"):
+            if script_file.name.startswith("__"):
+                continue
+            
+            # Try to match by reading the script and finding the class name
+            try:
+                with open(script_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    
+                # Look for script metadata with matching name
+                if f"'name': '{script_name}'" in content or f'"name": "{script_name}"' in content:
+                    return script_file
+                    
+            except Exception:
+                continue
+        
+        return None
+    
+    def _detect_argument_patterns(self, script_file: Path) -> Set[str]:
+        """Detect common argument parsing patterns in script files"""
+        patterns = set()
+        
+        if not script_file or not script_file.exists():
+            return patterns
+        
+        try:
+            with open(script_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Detect various argument patterns
+            patterns.update(self._detect_patterns_by_text(content))
+            patterns.update(self._detect_patterns_by_ast(content))
+            
+        except Exception as e:
+            logger.debug(f"Error detecting patterns in {script_file}: {e}")
+        
+        return patterns
+    
+    def _detect_patterns_by_text(self, content: str) -> Set[str]:
+        """Detect argument patterns using text matching"""
+        patterns = set()
+        
+        # Common patterns to look for
+        pattern_checks = [
+            (r'import\s+argparse', 'argparse'),
+            (r'ArgumentParser\s*\(', 'argparse'),
+            (r'add_argument\s*\(', 'argparse'),
+            (r'import\s+click', 'click'),
+            (r'@click\.(command|option|argument)', 'click'),
+            (r'sys\.argv\[', 'sys.argv'),
+            (r'len\s*\(\s*sys\.argv\s*\)', 'sys.argv'),
+            (r'getopt\.getopt', 'getopt'),
+            (r'import\s+getopt', 'getopt'),
+            (r'optparse\.OptionParser', 'optparse'),
+            (r'import\s+optparse', 'optparse'),
+        ]
+        
+        for pattern, name in pattern_checks:
+            if re.search(pattern, content, re.IGNORECASE):
+                patterns.add(name)
+        
+        return patterns
+    
+    def _detect_patterns_by_ast(self, content: str) -> Set[str]:
+        """Detect argument patterns using AST analysis"""
+        patterns = set()
+        
+        try:
+            tree = ast.parse(content)
+            
+            for node in ast.walk(tree):
+                # Check for argparse usage
+                if isinstance(node, ast.Call):
+                    if self._is_argparse_call(node):
+                        patterns.add('argparse')
+                
+                # Check for sys.argv access
+                if isinstance(node, ast.Subscript):
+                    if self._is_sys_argv_access(node):
+                        patterns.add('sys.argv')
+                
+                # Check for function definitions with arguments
+                if isinstance(node, ast.FunctionDef):
+                    if node.name == 'execute' and len(node.args.args) > 1:  # More than just 'self'
+                        patterns.add('function_args')
+        
+        except SyntaxError:
+            # If we can't parse the AST, that's OK
+            pass
+        except Exception as e:
+            logger.debug(f"AST analysis error: {e}")
+        
+        return patterns
+    
+    def _is_argparse_call(self, node: ast.Call) -> bool:
+        """Check if AST node is an argparse-related call"""
+        try:
+            if isinstance(node.func, ast.Attribute):
+                if node.func.attr in ['ArgumentParser', 'add_argument', 'parse_args']:
+                    return True
+            elif isinstance(node.func, ast.Name):
+                if node.func.id == 'ArgumentParser':
+                    return True
+        except Exception:
+            pass
+        return False
+    
+    def _is_sys_argv_access(self, node: ast.Subscript) -> bool:
+        """Check if AST node accesses sys.argv"""
+        try:
+            if isinstance(node.value, ast.Attribute):
+                if (isinstance(node.value.value, ast.Name) and 
+                    node.value.value.id == 'sys' and 
+                    node.value.attr == 'argv'):
+                    return True
+        except Exception:
+            pass
+        return False
+    
+    def get_scripts_needing_configuration(self) -> List[Dict[str, Any]]:
+        """Get list of scripts that need argument configuration"""
+        scripts_needing_config = []
+        
+        for script in self.loaded_scripts.values():
+            arg_info = self.get_script_argument_info(script)
+            if arg_info['needs_configuration']:
+                scripts_needing_config.append(arg_info)
+        
+        return scripts_needing_config
+    
+    def get_scripts_supporting_arguments(self) -> List[Dict[str, Any]]:
+        """Get list of scripts that support arguments (configured or not)"""
+        scripts_supporting_args = []
+        
+        for script in self.loaded_scripts.values():
+            arg_info = self.get_script_argument_info(script)
+            if arg_info['supports_arguments']:
+                scripts_supporting_args.append(arg_info)
+        
+        return scripts_supporting_args
