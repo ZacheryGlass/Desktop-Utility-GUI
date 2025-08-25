@@ -1,4 +1,5 @@
 import logging
+from typing import Dict, Any
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox,
                              QCheckBox, QComboBox, QLabel, QPushButton,
                              QDialogButtonBox, QMessageBox, QWidget, QTabWidget,
