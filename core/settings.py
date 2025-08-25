@@ -35,6 +35,10 @@ class SettingsManager(QObject):
         'appearance': {
             'font_family': 'System Default',
             'font_size': 9
+        },
+        'emoji_icons': {
+            # Script emoji icons will be stored as 'emoji_icons/ScriptName': '🔊'
+            # This is just a placeholder for the schema
         }
     }
     
@@ -207,3 +211,63 @@ class SettingsManager(QObject):
         """Get the effective display name (custom if set, otherwise original)."""
         custom_name = self.get_custom_name(original_name)
         return custom_name if custom_name else original_name
+    
+    # Script emoji methods
+    def get_script_emoji(self, script_name: str) -> Optional[str]:
+        """Get custom emoji for a script, or None if no custom emoji is set."""
+        return self.get(f'emoji_icons/{script_name}')
+    
+    def set_script_emoji(self, script_name: str, emoji: str) -> bool:
+        """Set a custom emoji for a script. Returns True if successful, False if validation failed."""
+        emoji = emoji.strip()
+        
+        if not emoji:
+            self.remove_script_emoji(script_name)
+            return True
+        
+        # Basic validation - ensure it's a single character (emoji)
+        if not self._validate_emoji(emoji):
+            logger.warning(f"Invalid emoji '{emoji}' for script '{script_name}'")
+            return False
+            
+        self.set(f'emoji_icons/{script_name}', emoji)
+        return True
+    
+    def _validate_emoji(self, emoji: str) -> bool:
+        """Validate emoji meets requirements."""
+        # Length validation (should be 1-4 characters for most emojis including compound ones)
+        if len(emoji) < 1 or len(emoji) > 4:
+            return False
+        
+        # Basic check - emoji should contain at least one character with Unicode category starting with 'S'
+        # This catches most symbols and emojis
+        import unicodedata
+        for char in emoji:
+            category = unicodedata.category(char)
+            if category.startswith('S') or category == 'So':  # Symbol categories
+                return True
+        
+        return False
+    
+    def remove_script_emoji(self, script_name: str) -> None:
+        """Remove custom emoji for a script (revert to default or none)."""
+        key = f'emoji_icons/{script_name}'
+        if self.settings.contains(key):
+            self.settings.remove(key)
+            self.settings.sync()
+            logger.debug(f"Removed custom emoji for: {script_name}")
+    
+    def get_all_script_emojis(self) -> Dict[str, str]:
+        """Get all custom script emojis as a dict of {script_name: emoji}."""
+        result = {}
+        self.settings.beginGroup('emoji_icons')
+        try:
+            for key in self.settings.allKeys():
+                result[key] = self.settings.value(key, '')
+        finally:
+            self.settings.endGroup()
+        return result
+    
+    def get_effective_emoji(self, script_name: str) -> Optional[str]:
+        """Get the effective emoji for a script (custom if set, otherwise None for default logic)."""
+        return self.get_script_emoji(script_name)

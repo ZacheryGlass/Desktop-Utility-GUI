@@ -67,6 +67,51 @@ class TrayManager(QObject):
         
         logger.info("TrayManager initialized")
     
+    def _get_effective_emoji_for_script(self, script_name: str) -> str:
+        """Get effective emoji for script (custom or default)"""
+        # First check for custom emoji
+        custom_emoji = self.settings.get_script_emoji(script_name)
+        if custom_emoji:
+            return custom_emoji
+        
+        # Return default emoji based on script name/type
+        return self._get_default_emoji(script_name)
+    
+    def _get_default_emoji(self, script_name: str) -> str:
+        """Get default emoji based on script name"""
+        name_lower = script_name.lower()
+        
+        # Audio related
+        if any(word in name_lower for word in ['audio', 'sound', 'volume', 'speaker', 'microphone']):
+            return '🔊'
+        
+        # Display related  
+        if any(word in name_lower for word in ['display', 'monitor', 'screen', 'resolution']):
+            return '🖥️'
+        
+        # Bluetooth related
+        if any(word in name_lower for word in ['bluetooth', 'bt', 'wireless']):
+            return '📶'
+        
+        # Power related
+        if any(word in name_lower for word in ['power', 'battery', 'energy', 'plan']):
+            return '⚡'
+        
+        # Network related
+        if any(word in name_lower for word in ['network', 'wifi', 'internet', 'connection']):
+            return '🌐'
+        
+        # File/clipboard related
+        if any(word in name_lower for word in ['file', 'clipboard', 'copy', 'paste']):
+            return '📋'
+        
+        # Test/debug related
+        if any(word in name_lower for word in ['test', 'debug', 'sample']):
+            return '🧪'
+        
+        # Default for unknown types
+        return '⚙️'
+    
     def _create_tray_icon(self):
         # Create a simple icon programmatically
         pixmap = QPixmap(64, 64)
@@ -206,13 +251,17 @@ class TrayManager(QObject):
     
     def _add_run_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
         """Add a simple RUN script as a menu item"""
+        # Get emoji for this script
+        emoji = self._get_effective_emoji_for_script(original_name)
+        emoji_prefix = f"{emoji} " if emoji else ""
+        
         # Get hotkey for this script (using original name)
         hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            menu_text = f"{display_name}\t│ {hotkey}"
+            menu_text = f"{emoji_prefix}{display_name}\t│ {hotkey}"
         else:
-            menu_text = display_name
+            menu_text = f"{emoji_prefix}{display_name}"
         
         action = QAction(menu_text, self)
         action.setToolTip(metadata.get('description', ''))
@@ -223,13 +272,17 @@ class TrayManager(QObject):
     
     def _add_toggle_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
         """Add a TOGGLE script as a menu item showing current state"""
+        # Get emoji for this script
+        emoji = self._get_effective_emoji_for_script(original_name)
+        emoji_prefix = f"{emoji} " if emoji else ""
+        
         # Get hotkey for this script (using original name)
         hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            menu_text = f"{display_name}\t│ {hotkey}"
+            menu_text = f"{emoji_prefix}{display_name}\t│ {hotkey}"
         else:
-            menu_text = display_name
+            menu_text = f"{emoji_prefix}{display_name}"
         
         action = QAction(menu_text, self)
         action.setToolTip(f"{metadata.get('description', '')} (Click to toggle)")
@@ -246,13 +299,16 @@ class TrayManager(QObject):
             self._add_run_script(script, original_name, display_name, metadata)
             return
         
-        # Create submenu for cycle options - include hotkey in submenu title
+        # Create submenu for cycle options - include emoji and hotkey in submenu title
+        emoji = self._get_effective_emoji_for_script(original_name)
+        emoji_prefix = f"{emoji} " if emoji else ""
+        
         hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            submenu_title = f"{display_name}\t│ {hotkey}"
+            submenu_title = f"{emoji_prefix}{display_name}\t│ {hotkey}"
         else:
-            submenu_title = display_name
+            submenu_title = f"{emoji_prefix}{display_name}"
         submenu = QMenu(submenu_title, self.context_menu)
         
         try:
@@ -288,13 +344,16 @@ class TrayManager(QObject):
             self._add_run_script(script, original_name, display_name, metadata)
             return
         
-        # Create submenu for select options - include hotkey in submenu title
+        # Create submenu for select options - include emoji and hotkey in submenu title
+        emoji = self._get_effective_emoji_for_script(original_name)
+        emoji_prefix = f"{emoji} " if emoji else ""
+        
         hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            submenu_title = f"{display_name}\t│ {hotkey}"
+            submenu_title = f"{emoji_prefix}{display_name}\t│ {hotkey}"
         else:
-            submenu_title = display_name
+            submenu_title = f"{emoji_prefix}{display_name}"
         submenu = QMenu(submenu_title, self.context_menu)
         
         try:
@@ -324,13 +383,17 @@ class TrayManager(QObject):
     
     def _add_number_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
         """Add a NUMBER script that shows input dialog when clicked"""
+        # Get emoji for this script
+        emoji = self._get_effective_emoji_for_script(original_name)
+        emoji_prefix = f"{emoji} " if emoji else ""
+        
         # Get hotkey for this script (using original name)
         hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            menu_text = f"{display_name}\t│ {hotkey}"
+            menu_text = f"{emoji_prefix}{display_name}\t│ {hotkey}"
         else:
-            menu_text = display_name
+            menu_text = f"{emoji_prefix}{display_name}"
         
         action = QAction(menu_text, self)
         action.setToolTip(f"{metadata.get('description', '')} (Click to set value)")
@@ -341,13 +404,17 @@ class TrayManager(QObject):
     
     def _add_text_input_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
         """Add a TEXT_INPUT script that shows input dialog when clicked"""
+        # Get emoji for this script
+        emoji = self._get_effective_emoji_for_script(original_name)
+        emoji_prefix = f"{emoji} " if emoji else ""
+        
         # Get hotkey for this script (using original name)
         hotkey = self.hotkey_registry.get_hotkey(original_name)
         if hotkey:
             # Use tab character for alignment in monospace font, with visual formatting
-            menu_text = f"{display_name}\t│ {hotkey}"
+            menu_text = f"{emoji_prefix}{display_name}\t│ {hotkey}"
         else:
-            menu_text = display_name
+            menu_text = f"{emoji_prefix}{display_name}"
         
         action = QAction(menu_text, self)
         action.setToolTip(f"{metadata.get('description', '')} (Click to enter text)")
@@ -522,16 +589,19 @@ class TrayManager(QObject):
             processed_scripts.add(script)
             
             try:
-                # Update submenu title to show hotkey with alignment
+                # Update submenu title to show emoji and hotkey with alignment
                 metadata = script.get_metadata()
                 original_name = metadata.get('name', 'Unknown Script')
                 display_name = self.script_loader.get_script_display_name(script)
+                emoji = self._get_effective_emoji_for_script(original_name)
+                emoji_prefix = f"{emoji} " if emoji else ""
+                
                 hotkey = self.hotkey_registry.get_hotkey(original_name)
                 if hotkey:
                     # Use tab character for alignment in monospace font
-                    submenu_title = f"{display_name}\t│ {hotkey}"
+                    submenu_title = f"{emoji_prefix}{display_name}\t│ {hotkey}"
                 else:
-                    submenu_title = display_name
+                    submenu_title = f"{emoji_prefix}{display_name}"
                 submenu.setTitle(submenu_title)
                 
                 # Update option checkmarks based on current status
@@ -557,13 +627,16 @@ class TrayManager(QObject):
                 display_name = self.script_loader.get_script_display_name(script)
                 button_type = metadata.get('button_type', ButtonType.RUN)
                 
-                # Update action text to show hotkey with alignment
+                # Update action text to show emoji and hotkey with alignment
+                emoji = self._get_effective_emoji_for_script(original_name)
+                emoji_prefix = f"{emoji} " if emoji else ""
+                
                 hotkey = self.hotkey_registry.get_hotkey(original_name)
                 if hotkey:
                     # Use tab character for alignment in monospace font, with visual formatting
-                    action.setText(f"{display_name}\t│ {hotkey}")
+                    action.setText(f"{emoji_prefix}{display_name}\t│ {hotkey}")
                 else:
-                    action.setText(display_name)
+                    action.setText(f"{emoji_prefix}{display_name}")
                 processed_scripts.add(script)
                         
             except Exception as e:
