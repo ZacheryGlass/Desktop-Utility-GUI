@@ -5,12 +5,16 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox,
                              QTableWidget, QTableWidgetItem, QHeaderView,
                              QAbstractItemView, QFontComboBox, QSpinBox)
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QFont
 
 from core.settings import SettingsManager
 from core.startup_manager import StartupManager
 from core.script_loader import ScriptLoader
 from core.hotkey_registry import HotkeyRegistry
 from gui.hotkey_configurator import HotkeyConfigDialog
+
+# UI Theme Constants
+CUSTOM_NAME_COLOR = Qt.GlobalColor.cyan
 
 logger = logging.getLogger('GUI.SettingsDialog')
 
@@ -309,7 +313,10 @@ class SettingsDialog(QDialog):
                 # Add visual indicator if custom name is set
                 custom_name = self.settings.get_custom_name(original_name)
                 if custom_name:
-                    display_item.setForeground(Qt.GlobalColor.cyan)  # Different color for custom names
+                    display_item.setForeground(CUSTOM_NAME_COLOR)  # Different color for custom names
+                    font = display_item.font()
+                    font.setItalic(True)
+                    display_item.setFont(font)
                 self.hotkeys_table.setItem(row_position, 1, display_item)
                 
                 # Description
@@ -367,8 +374,20 @@ class SettingsDialog(QDialog):
         if ok and new_name.strip():
             new_name = new_name.strip()
             if new_name != original_name:
-                # Set custom name
-                self.settings.set_custom_name(original_name, new_name)
+                # Get all script names for conflict validation
+                scripts = self.script_loader.discover_scripts()
+                script_names = [script.name for script in scripts]
+                
+                # Set custom name with validation
+                if not self.settings.set_custom_name(original_name, new_name, script_names):
+                    # Validation failed - show error message
+                    QMessageBox.warning(
+                        self,
+                        "Invalid Display Name",
+                        f"The display name '{new_name}' is invalid. It may conflict with an existing script name "
+                        f"or custom name, be too long (max 50 characters), or contain invalid characters."
+                    )
+                    return
             else:
                 # Remove custom name (revert to original)
                 self.settings.remove_custom_name(original_name)
@@ -377,12 +396,18 @@ class SettingsDialog(QDialog):
             display_item = self.hotkeys_table.item(row, 1)
             if display_item:
                 display_item.setText(new_name)
-                # Update color based on whether it's custom or original
+                # Update color and font based on whether it's custom or original
                 custom_name = self.settings.get_custom_name(original_name)
                 if custom_name:
-                    display_item.setForeground(Qt.GlobalColor.cyan)  # Custom name
+                    display_item.setForeground(CUSTOM_NAME_COLOR)  # Custom name
+                    font = display_item.font()
+                    font.setItalic(True)
+                    display_item.setFont(font)
                 else:
                     display_item.setForeground(Qt.GlobalColor.white)  # Original name
+                    font = display_item.font()
+                    font.setItalic(False)
+                    display_item.setFont(font)
         elif ok and not new_name.strip():
             # Empty name - revert to original
             self.settings.remove_custom_name(original_name)
@@ -390,6 +415,9 @@ class SettingsDialog(QDialog):
             if display_item:
                 display_item.setText(original_name)
                 display_item.setForeground(Qt.GlobalColor.white)
+                font = display_item.font()
+                font.setItalic(False)
+                display_item.setFont(font)
     
     def _edit_hotkey(self, row: int, script_name: str):
         """Handle editing of hotkey"""
@@ -443,7 +471,7 @@ class SettingsDialog(QDialog):
         # Remove hotkey
         if self.hotkey_registry.remove_hotkey(script_name):
             # Update table display
-            hotkey_item = self.hotkeys_table.item(row, 2)
+            hotkey_item = self.hotkeys_table.item(row, 3)
             if hotkey_item:
                 hotkey_item.setText("(empty)")
                 hotkey_item.setForeground(Qt.GlobalColor.gray)

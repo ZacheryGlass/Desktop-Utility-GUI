@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any, Optional, Dict
 from PyQt6.QtCore import QSettings, QObject, pyqtSignal
 
@@ -141,12 +142,47 @@ class SettingsManager(QObject):
         """Get custom display name for a script, or None if no custom name is set."""
         return self.get(f'custom_names/{original_name}')
     
-    def set_custom_name(self, original_name: str, custom_name: str) -> None:
-        """Set a custom display name for a script."""
-        if custom_name.strip():
-            self.set(f'custom_names/{original_name}', custom_name.strip())
-        else:
+    def set_custom_name(self, original_name: str, custom_name: str, existing_script_names: list = None) -> bool:
+        """Set a custom display name for a script. Returns True if successful, False if validation failed."""
+        custom_name = custom_name.strip()
+        
+        if not custom_name:
             self.remove_custom_name(original_name)
+            return True
+        
+        # Validate input
+        if not self._validate_custom_name(custom_name, original_name, existing_script_names):
+            logger.warning(f"Invalid custom name '{custom_name}' for script '{original_name}'")
+            return False
+            
+        self.set(f'custom_names/{original_name}', custom_name)
+        return True
+    
+    def _validate_custom_name(self, name: str, original_name: str = None, existing_script_names: list = None) -> bool:
+        """Validate custom name meets requirements."""
+        # Length validation (1-50 characters)
+        if len(name) < 1 or len(name) > 50:
+            return False
+        
+        # Character validation - allow alphanumeric, spaces, and common punctuation
+        if not re.match(r'^[a-zA-Z0-9\s\-_\(\)\[\]\.,:;!?\'"]+$', name):
+            return False
+        
+        # Conflict validation - check if custom name matches any existing script names
+        if existing_script_names:
+            for script_name in existing_script_names:
+                if script_name != original_name and name.lower() == script_name.lower():
+                    logger.warning(f"Custom name '{name}' conflicts with existing script '{script_name}'")
+                    return False
+        
+        # Check if custom name conflicts with other custom names
+        existing_custom_names = self.get_all_custom_names()
+        for orig_name, custom_name in existing_custom_names.items():
+            if orig_name != original_name and custom_name.lower() == name.lower():
+                logger.warning(f"Custom name '{name}' conflicts with existing custom name for '{orig_name}'")
+                return False
+            
+        return True
     
     def remove_custom_name(self, original_name: str) -> None:
         """Remove custom display name for a script (revert to original)."""

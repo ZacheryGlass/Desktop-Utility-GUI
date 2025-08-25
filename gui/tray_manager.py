@@ -529,7 +529,7 @@ class TrayManager(QObject):
                 hotkey = self.hotkey_registry.get_hotkey(original_name)
                 if hotkey:
                     # Use tab character for alignment in monospace font
-                    submenu_title = f"{display_name}\t| {hotkey}"
+                    submenu_title = f"{display_name}\t│ {hotkey}"
                 else:
                     submenu_title = display_name
                 submenu.setTitle(submenu_title)
