@@ -1,150 +1,126 @@
 import subprocess
 import re
-from typing import Dict, Any, List
+import json
 import sys
+import argparse
 
-sys.path.append('..')
-from core.base_script import UtilityScript
-from core.button_types import ButtonType, CycleOptions
 
-class PowerPlanToggle(UtilityScript):
+def get_current_power_plan():
+    """Get the currently active power plan."""
+    power_plans = {
+        'Balanced': '381b4222-f694-41f0-9685-ff5bb260df2e',
+        'High performance': '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c',
+        'Power saver': 'a1841308-3541-4fab-bc81-f71556f20b4a'
+    }
     
-    def __init__(self):
-        super().__init__()
-        self.power_plans = {
-            'Balanced': '381b4222-f694-41f0-9685-ff5bb260df2e',
-            'High performance': '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c',
-            'Power saver': 'a1841308-3541-4fab-bc81-f71556f20b4a'
-        }
+    if sys.platform != 'win32':
+        return 'Balanced'
     
-    def get_metadata(self) -> Dict[str, Any]:
+    try:
+        result = subprocess.run(
+            ['powercfg', '/getactivescheme'],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        )
+        
+        if result.returncode == 0:
+            match = re.search(r':\s+([a-f0-9-]+)\s+\(([^)]+)\)', result.stdout)
+            if match:
+                plan_name = match.group(2)
+                for known_plan in power_plans.keys():
+                    if known_plan.lower() in plan_name.lower():
+                        return known_plan
+                return plan_name
+        
+        return 'Unknown'
+        
+    except Exception as e:
+        print(f"Error getting power plan: {e}")
+        return 'Unknown'
+
+
+def set_power_plan(plan_name: str):
+    """Set the Windows power plan."""
+    power_plans = {
+        'Balanced': '381b4222-f694-41f0-9685-ff5bb260df2e',
+        'High performance': '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c',
+        'Power saver': 'a1841308-3541-4fab-bc81-f71556f20b4a'
+    }
+    
+    if sys.platform != 'win32':
         return {
-            'name': 'Power Plan',
-            'description': 'Cycle through Windows power plans',
-            'button_type': ButtonType.CYCLE,
-            'button_options': CycleOptions(
-                options=['Balanced', 'High performance', 'Power saver'],
-                show_current=True
-            )
+            'success': False,
+            'message': 'Power plan control only supported on Windows'
         }
     
-    def get_status(self) -> str:
-        if sys.platform != 'win32':
-            return 'Balanced'
+    try:
+        if plan_name not in power_plans:
+            return {
+                'success': False,
+                'message': f'Unknown power plan: {plan_name}'
+            }
         
-        try:
-            result = subprocess.run(
-                ['powercfg', '/getactivescheme'],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-            )
+        guid = power_plans[plan_name]
+        
+        result = subprocess.run(
+            ['powercfg', '/setactive', guid],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        )
+        
+        if result.returncode == 0:
+            return {
+                'success': True,
+                'message': f'Power plan changed to: {plan_name}',
+                'new_status': plan_name
+            }
+        else:
+            error_msg = result.stderr if result.stderr else 'Unknown error'
+            return {
+                'success': False,
+                'message': f'Failed to change power plan: {error_msg}'
+            }
             
-            if result.returncode == 0:
-                match = re.search(r':\s+([a-f0-9-]+)\s+\(([^)]+)\)', result.stdout)
-                if match:
-                    plan_name = match.group(2)
-                    for known_plan in self.power_plans.keys():
-                        if known_plan.lower() in plan_name.lower():
-                            return known_plan
-                    return plan_name
-            
-            return 'Unknown'
-            
-        except Exception as e:
-            print(f"Error getting power plan: {e}")
-            return 'Unknown'
+    except subprocess.TimeoutExpired:
+        return {
+            'success': False,
+            'message': 'Power plan change operation timed out'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error changing power plan: {str(e)}'
+        }
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Windows Power Plan Control')
+    parser.add_argument('--plan', choices=['Balanced', 'High performance', 'Power saver'],
+                       help='Power plan to set')
     
-    def execute(self, plan_name: str) -> Dict[str, Any]:
-        if sys.platform != 'win32':
-            return {
-                'success': False,
-                'message': 'Power plan control only supported on Windows'
-            }
-        
-        try:
-            if plan_name not in self.power_plans:
-                return {
-                    'success': False,
-                    'message': f'Unknown power plan: {plan_name}'
-                }
-            
-            guid = self.power_plans[plan_name]
-            
-            result = subprocess.run(
-                ['powercfg', '/setactive', guid],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-            )
-            
-            if result.returncode == 0:
-                return {
-                    'success': True,
-                    'message': f'Power plan changed to: {plan_name}',
-                    'new_status': plan_name
-                }
-            else:
-                error_msg = result.stderr if result.stderr else 'Unknown error'
-                return {
-                    'success': False,
-                    'message': f'Failed to change power plan: {error_msg}'
-                }
-                
-        except subprocess.TimeoutExpired:
-            return {
-                'success': False,
-                'message': 'Power plan change operation timed out'
-            }
-        except Exception as e:
-            return {
-                'success': False,
-                'message': f'Error changing power plan: {str(e)}'
-            }
+    args = parser.parse_args()
     
-    def validate(self) -> bool:
-        if sys.platform != 'win32':
-            return False
+    if args.plan:
+        result = set_power_plan(args.plan)
+    else:
+        # Cycle through available plans
+        current_status = get_current_power_plan()
+        options = ['Balanced', 'High performance', 'Power saver']
         
-        try:
-            result = subprocess.run(
-                ['powercfg', '/?'],
-                capture_output=True,
-                timeout=2
-            )
-            return result.returncode == 0
-        except:
-            return False
+        current_index = options.index(current_status) if current_status in options else 0
+        next_index = (current_index + 1) % len(options)
+        next_plan = options[next_index]
+        
+        result = set_power_plan(next_plan)
+    
+    print(json.dumps(result))
+    return result.get('success', False)
 
 
 if __name__ == "__main__":
-    import json
-    
-    script = PowerPlanToggle()
-    
-    if len(sys.argv) > 1:
-        plan_name = sys.argv[1]
-        result = script.execute(plan_name)
-    else:
-        current_status = script.get_status()
-        print(f"Current power plan: {current_status}")
-        
-        metadata = script.get_metadata()
-        if 'button_options' in metadata and hasattr(metadata['button_options'], 'options'):
-            options = metadata['button_options'].options
-            print(f"Available plans: {', '.join(options)}")
-            
-            current_index = options.index(current_status) if current_status in options else 0
-            next_index = (current_index + 1) % len(options)
-            next_plan = options[next_index]
-            
-            print(f"Switching to: {next_plan}")
-            result = script.execute(next_plan)
-        else:
-            print("Error: Could not determine available power plans")
-            sys.exit(1)
-    
-    print(json.dumps(result, indent=2))
-    sys.exit(0 if result.get('success', False) else 1)
+    success = main()
+    sys.exit(0 if success else 1)
