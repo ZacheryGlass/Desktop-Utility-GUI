@@ -66,67 +66,6 @@ class TrayManager(QObject):
         
         logger.info("TrayManager initialized")
     
-    def _get_effective_emoji_for_script(self, script_name: str) -> str:
-        """Get effective emoji for script (custom or default)"""
-        # First check for custom emoji
-        custom_emoji = self.settings.get_script_emoji(script_name)
-        if custom_emoji:
-            return custom_emoji
-        
-        # Return default emoji based on script name/type
-        return self._get_default_emoji(script_name)
-    
-    def _get_default_emoji(self, script_name: str) -> str:
-        """Get default emoji based on script name"""
-        name_lower = script_name.lower()
-        
-        # Audio related
-        if any(word in name_lower for word in ['audio', 'sound', 'volume', 'speaker', 'microphone']):
-            return '🔊'
-        
-        # Display related  
-        if any(word in name_lower for word in ['display', 'monitor', 'screen', 'resolution']):
-            return '🖥️'
-        
-        # Bluetooth related
-        if any(word in name_lower for word in ['bluetooth', 'bt', 'wireless']):
-            return '📶'
-        
-        # Power related
-        if any(word in name_lower for word in ['power', 'battery', 'energy', 'plan']):
-            return '⚡'
-        
-        # Network related
-        if any(word in name_lower for word in ['network', 'wifi', 'internet', 'connection']):
-            return '🌐'
-        
-        # System related
-        if any(word in name_lower for word in ['system', 'registry', 'service']):
-            return '⚙️'
-        
-        # File/folder related
-        if any(word in name_lower for word in ['file', 'folder', 'directory', 'path']):
-            return '📁'
-        
-        # Clipboard related
-        if any(word in name_lower for word in ['clipboard', 'copy', 'paste']):
-            return '📋'
-        
-        # Time/schedule related
-        if any(word in name_lower for word in ['time', 'clock', 'schedule', 'timer']):
-            return '⏰'
-        
-        # Process/task related
-        if any(word in name_lower for word in ['process', 'task', 'kill', 'stop']):
-            return '🔄'
-        
-        # Security related
-        if any(word in name_lower for word in ['security', 'firewall', 'antivirus', 'scan']):
-            return '🛡️'
-        
-        # Default fallback
-        return '🔧'
-    
     def _create_tray_icon(self):
         """Create the tray icon"""
         try:
@@ -282,10 +221,7 @@ class TrayManager(QObject):
     
     def _create_simple_script_action(self, script_info: ScriptInfo, display_name: str) -> QAction:
         """Create action for simple scripts without arguments"""
-        # Get emoji and create display text
-        emoji = self._get_effective_emoji_for_script(display_name)
-        # Use proper spacing instead of tabs for better alignment
-        display_text = f"{emoji}  {display_name}" if emoji else display_name
+        display_text = display_name
         
         # Get status for display
         status = self.script_loader.get_script_status(script_info.file_path.stem)
@@ -298,10 +234,7 @@ class TrayManager(QObject):
     
     def _create_script_action_with_arguments(self, script_info: ScriptInfo, display_name: str) -> QAction:
         """Create action for scripts that require arguments"""
-        # Get emoji and create display text
-        emoji = self._get_effective_emoji_for_script(display_name)
-        # Use proper spacing instead of tabs for better alignment
-        display_text = f"{emoji}  {display_name}" if emoji else display_name
+        display_text = display_name
         
         # Check if script has choice-based arguments (like cycle/select)
         has_choices = any(arg.choices for arg in script_info.arguments)
@@ -448,9 +381,7 @@ class TrayManager(QObject):
                     script_info = self.script_name_to_info[display_name]
                     status = self.script_loader.get_script_status(script_info.file_path.stem)
                     
-                    # Update action text with current status
-                    emoji = self._get_effective_emoji_for_script(display_name)
-                    display_text = f"{emoji}  {display_name}" if emoji else display_name
+                    display_text = display_name
                     if status and status != "Ready":
                         display_text += f" [{status}]"
                     
