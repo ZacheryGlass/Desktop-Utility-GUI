@@ -5,10 +5,9 @@ from PyQt6.QtWidgets import (QSystemTrayIcon, QMenu, QApplication,
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt, QRect
 from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QBrush, QPen, QScreen
 
-from core.base_script import UtilityScript
 from core.script_loader import ScriptLoader
+from core.script_analyzer import ScriptInfo
 from core.settings import SettingsManager
-from core.button_types import ButtonType
 from core.hotkey_manager import HotkeyManager
 from core.hotkey_registry import HotkeyRegistry
 
@@ -26,8 +25,8 @@ class TrayManager(QObject):
         self.script_loader = None
         self.scripts = []
         self.script_actions = {}
-        self.script_menus = {}  # Track submenus for CYCLE/SELECT scripts
-        self.script_name_to_instance = {}  # Map script names to instances for hotkey execution
+        self.script_menus = {}  # Track submenus for scripts with choices
+        self.script_name_to_info = {}  # Map script names to ScriptInfo for hotkey execution
         
         # Initialize hotkey management
         self.hotkey_manager = HotkeyManager()
@@ -101,59 +100,102 @@ class TrayManager(QObject):
         if any(word in name_lower for word in ['network', 'wifi', 'internet', 'connection']):
             return '🌐'
         
-        # File/clipboard related
-        if any(word in name_lower for word in ['file', 'clipboard', 'copy', 'paste']):
+        # System related
+        if any(word in name_lower for word in ['system', 'registry', 'service']):
+            return '⚙️'
+        
+        # File/folder related
+        if any(word in name_lower for word in ['file', 'folder', 'directory', 'path']):
+            return '📁'
+        
+        # Clipboard related
+        if any(word in name_lower for word in ['clipboard', 'copy', 'paste']):
             return '📋'
         
-        # Test/debug related
-        if any(word in name_lower for word in ['test', 'debug', 'sample']):
-            return '🧪'
+        # Time/schedule related
+        if any(word in name_lower for word in ['time', 'clock', 'schedule', 'timer']):
+            return '⏰'
         
-        # Default for unknown types
-        return '⚙️'
+        # Process/task related
+        if any(word in name_lower for word in ['process', 'task', 'kill', 'stop']):
+            return '🔄'
+        
+        # Security related
+        if any(word in name_lower for word in ['security', 'firewall', 'antivirus', 'scan']):
+            return '🛡️'
+        
+        # Default fallback
+        return '🔧'
     
     def _create_tray_icon(self):
-        # Create a simple icon programmatically
-        pixmap = QPixmap(64, 64)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # Draw a rounded rectangle background
-        painter.setBrush(QBrush(Qt.GlobalColor.lightGray))
-        painter.setPen(QPen(Qt.GlobalColor.darkCyan, 2))
-        painter.drawRoundedRect(4, 4, 56, 56, 10, 10)
-        
-        # Draw "DU" text
-        painter.setPen(QPen(Qt.GlobalColor.black, 2))
-        font = painter.font()
-        font.setPointSize(20)
-        font.setBold(True)
-        painter.setFont(font)
-        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "DU")
-        
-        painter.end()
-        
-        icon = QIcon(pixmap)
-        self.tray_icon.setIcon(icon)
+        """Create the tray icon"""
+        try:
+            pixmap = QPixmap(16, 16)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            
+            # Draw a simple gear icon
+            painter.setBrush(QBrush(Qt.GlobalColor.gray))
+            painter.setPen(QPen(Qt.GlobalColor.darkGray, 1))
+            
+            # Draw gear teeth (simplified)
+            center_x, center_y = 8, 8
+            painter.drawEllipse(center_x - 6, center_y - 6, 12, 12)
+            painter.drawEllipse(center_x - 3, center_y - 3, 6, 6)
+            
+            painter.end()
+            
+            icon = QIcon(pixmap)
+            self.tray_icon.setIcon(icon)
+        except Exception as e:
+            logger.error(f"Error creating tray icon: {e}")
+            # Fallback to system icon
+            self.tray_icon.setIcon(self.style().standardIcon(QApplication.style().standardIcon.SP_ComputerIcon))
+    
+    def _update_menu_font(self):
+        """Update menu font based on settings"""
+        try:
+            font_family = self.settings.get_font_family()
+            font_size = self.settings.get_font_size()
+            
+            font = self.context_menu.font()
+            if font_family and font_family != 'System Default':
+                font.setFamily(font_family)
+            font.setPointSize(font_size)
+            
+            self.context_menu.setFont(font)
+            logger.debug(f"Updated menu font: {font_family}, {font_size}pt")
+        except Exception as e:
+            logger.error(f"Error updating menu font: {e}")
     
     def _setup_context_menu(self):
-        self.context_menu.clear()
-        
-        # Add title
-        title_action = self.context_menu.addAction("Desktop Utilities")
+        """Setup the basic context menu structure"""
+        # Title
+        title_action = QAction("Desktop Utilities", self)
         title_action.setEnabled(False)
-        font = title_action.font()
-        font.setBold(True)
-        title_action.setFont(font)
+        title_font = title_action.font()
+        title_font.setBold(True)
+        title_action.setFont(title_font)
+        self.context_menu.addAction(title_action)
         
         self.context_menu.addSeparator()
         
-        # Scripts will be added dynamically here
-        # (Scripts area - populated by _rebuild_scripts_menu)
+        # Scripts will be added here by update_scripts()
         
-        # Settings and Exit will be added at the end by _rebuild_scripts_menu
+        # Bottom separator and settings
+        self.context_menu.addSeparator()
+        
+        # Settings action
+        settings_action = QAction("Settings", self)
+        settings_action.triggered.connect(self.settings_requested.emit)
+        self.context_menu.addAction(settings_action)
+        
+        # Exit action
+        exit_action = QAction("Exit", self)
+        exit_action.triggered.connect(self.exit_requested.emit)
+        self.context_menu.addAction(exit_action)
     
     def set_script_loader(self, script_loader: ScriptLoader):
         self.script_loader = script_loader
@@ -171,7 +213,7 @@ class TrayManager(QObject):
         # Clear everything except title and first separator
         self.script_actions.clear()
         self.script_menus.clear()
-        self.script_name_to_instance.clear()
+        self.script_name_to_info.clear()
         
         # Remove all actions except title and first separator
         actions = self.context_menu.actions()
@@ -185,6 +227,10 @@ class TrayManager(QObject):
                 if i + 1 < len(actions) and actions[i + 1].isSeparator():
                     actions_to_keep.append(actions[i + 1])
                 break
+        
+        # Keep bottom separator and settings/exit
+        if len(actions) >= 3:
+            actions_to_keep.extend(actions[-3:])  # separator, settings, exit
         
         # Remove all other actions
         for action in actions:
@@ -200,593 +246,273 @@ class TrayManager(QObject):
         if not self.scripts:
             no_scripts_action = QAction("No scripts available", self)
             no_scripts_action.setEnabled(False)
-            self.context_menu.addAction(no_scripts_action)
+            # Insert before the bottom separator
+            bottom_actions = self.context_menu.actions()[-3:]
+            if bottom_actions:
+                self.context_menu.insertAction(bottom_actions[0], no_scripts_action)
         else:
-            # Add scripts with tab-based alignment
-            for script in self.scripts:
+            # Add scripts
+            bottom_actions = self.context_menu.actions()[-3:]
+            for script_info in self.scripts:
                 try:
-                    metadata = script.get_metadata()
-                    original_name = metadata.get('name', 'Unknown Script')
-                    button_type = metadata.get('button_type', ButtonType.RUN)
+                    display_name = self.script_loader.get_script_display_name(script_info)
+                    self.script_name_to_info[display_name] = script_info
                     
-                    # Get effective display name (custom or original)
-                    display_name = self.script_loader.get_script_display_name(script)
-                    
-                    # Store script instance by original name for hotkey execution (hotkeys use original names)
-                    self.script_name_to_instance[original_name] = script
-                    
-                    if button_type == ButtonType.RUN:
-                        self._add_run_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.TOGGLE:
-                        self._add_toggle_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.CYCLE:
-                        self._add_cycle_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.SELECT:
-                        self._add_select_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.NUMBER:
-                        self._add_number_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.TEXT_INPUT:
-                        self._add_text_input_script(script, original_name, display_name, metadata)
-                    elif button_type == ButtonType.SLIDER:
-                        logger.info(f"Skipping deprecated SLIDER script: {display_name}")
-                        continue
+                    # Determine if script needs arguments
+                    if script_info.arguments:
+                        # Script requires arguments - create submenu or input dialog
+                        action = self._create_script_action_with_arguments(script_info, display_name)
                     else:
-                        self._add_run_script(script, original_name, display_name, metadata)
+                        # Simple script - direct execution
+                        action = self._create_simple_script_action(script_info, display_name)
+                    
+                    if action and bottom_actions:
+                        self.context_menu.insertAction(bottom_actions[0], action)
+                        self.script_actions[display_name] = action
                         
                 except Exception as e:
-                    logger.error(f"Error adding script to tray menu: {e}")
-        
-        # Add final menu structure: Separator -> Settings -> Separator -> Exit
-        self.context_menu.addSeparator()
-        
-        settings_action = QAction("Settings...", self)
-        settings_action.triggered.connect(self.settings_requested.emit)
-        self.context_menu.addAction(settings_action)
-        
-        self.context_menu.addSeparator()
-        
-        exit_action = QAction("Exit", self)
-        exit_action.triggered.connect(self.exit_requested.emit)
-        self.context_menu.addAction(exit_action)
+                    logger.error(f"Error adding script {script_info.display_name}: {e}")
     
-    def _add_run_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
-        """Add a simple RUN script as a menu item"""
-        # Get emoji for this script
-        emoji = self._get_effective_emoji_for_script(original_name)
-        emoji_prefix = f"{emoji} " if emoji else ""
+    def _create_simple_script_action(self, script_info: ScriptInfo, display_name: str) -> QAction:
+        """Create action for simple scripts without arguments"""
+        # Get emoji and create display text
+        emoji = self._get_effective_emoji_for_script(display_name)
+        # Use proper spacing instead of tabs for better alignment
+        display_text = f"{emoji}  {display_name}" if emoji else display_name
         
-        # Get hotkey for this script (using original name)
-        hotkey = self.hotkey_registry.get_hotkey(original_name)
-        if hotkey:
-            # Use tab character for alignment in monospace font, with visual formatting
-            menu_text = f"{emoji_prefix}{display_name}\t│ {hotkey}"
-        else:
-            menu_text = f"{emoji_prefix}{display_name}"
+        # Get status for display
+        status = self.script_loader.get_script_status(script_info.file_path.stem)
+        if status and status != "Ready":
+            display_text += f" [{status}]"
         
-        action = QAction(menu_text, self)
-        action.setToolTip(metadata.get('description', ''))
-        action.triggered.connect(lambda checked, s=script: self._execute_script(s))
-        
-        self.script_actions[action] = script
-        self.context_menu.addAction(action)
+        action = QAction(display_text, self)
+        action.triggered.connect(lambda checked, s=script_info: self._execute_simple_script(s))
+        return action
     
-    def _add_toggle_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
-        """Add a TOGGLE script as a menu item showing current state"""
-        # Get emoji for this script
-        emoji = self._get_effective_emoji_for_script(original_name)
-        emoji_prefix = f"{emoji} " if emoji else ""
+    def _create_script_action_with_arguments(self, script_info: ScriptInfo, display_name: str) -> QAction:
+        """Create action for scripts that require arguments"""
+        # Get emoji and create display text
+        emoji = self._get_effective_emoji_for_script(display_name)
+        # Use proper spacing instead of tabs for better alignment
+        display_text = f"{emoji}  {display_name}" if emoji else display_name
         
-        # Get hotkey for this script (using original name)
-        hotkey = self.hotkey_registry.get_hotkey(original_name)
-        if hotkey:
-            # Use tab character for alignment in monospace font, with visual formatting
-            menu_text = f"{emoji_prefix}{display_name}\t│ {hotkey}"
+        # Check if script has choice-based arguments (like cycle/select)
+        has_choices = any(arg.choices for arg in script_info.arguments)
+        
+        if has_choices and len(script_info.arguments) == 1:
+            # Single argument with choices - create submenu
+            return self._create_choice_submenu(script_info, display_name, display_text)
         else:
-            menu_text = f"{emoji_prefix}{display_name}"
-        
-        action = QAction(menu_text, self)
-        action.setToolTip(f"{metadata.get('description', '')} (Click to toggle)")
-        action.triggered.connect(lambda checked, s=script: self._execute_toggle_script(s))
-        
-        self.script_actions[action] = script
-        self.context_menu.addAction(action)
+            # Multiple arguments or complex input - use dialog
+            action = QAction(display_text, self)
+            action.triggered.connect(lambda checked, s=script_info: self._execute_script_with_dialog(s))
+            return action
     
-    def _add_cycle_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
-        """Add a CYCLE script as a submenu with all options"""
-        button_options = metadata.get('button_options')
-        if not button_options or not hasattr(button_options, 'options') or not button_options.options:
-            # Fallback to simple execution if no options defined
-            self._add_run_script(script, original_name, display_name, metadata)
-            return
+    def _create_choice_submenu(self, script_info: ScriptInfo, display_name: str, display_text: str) -> QAction:
+        """Create submenu for scripts with choice arguments"""
+        submenu = QMenu(display_text, self.context_menu)
+        submenu.setFont(self.context_menu.font())
         
-        # Create submenu for cycle options - include emoji and hotkey in submenu title
-        emoji = self._get_effective_emoji_for_script(original_name)
-        emoji_prefix = f"{emoji} " if emoji else ""
-        
-        hotkey = self.hotkey_registry.get_hotkey(original_name)
-        if hotkey:
-            # Use tab character for alignment in monospace font, with visual formatting
-            submenu_title = f"{emoji_prefix}{display_name}\t│ {hotkey}"
-        else:
-            submenu_title = f"{emoji_prefix}{display_name}"
-        submenu = QMenu(submenu_title, self.context_menu)
-        
-        try:
-            current_status = script.get_status()
-        except:
-            current_status = ""
-        
-        for option in button_options.options:
-            option_action = QAction(option, self)
-            option_action.setCheckable(True)
-            
-            # Check current option
-            if current_status and (option.lower() in current_status.lower() or 
-                                   current_status.lower() in option.lower()):
-                option_action.setChecked(True)
-            
-            option_action.triggered.connect(
-                lambda checked, s=script, opt=option: self._execute_script(s, opt)
+        arg_info = script_info.arguments[0]  # Single choice argument
+        for choice in arg_info.choices:
+            choice_action = QAction(choice, submenu)
+            choice_action.triggered.connect(
+                lambda checked, s=script_info, choice=choice: self._execute_script_with_choice(s, arg_info.name, choice)
             )
-            
-            self.script_actions[option_action] = script
-            submenu.addAction(option_action)
+            submenu.addAction(choice_action)
         
-        # Store the submenu for status updates
-        self.script_menus[script] = submenu
-        self.context_menu.addMenu(submenu)
+        # Create the main action that shows the submenu
+        main_action = QAction(display_text, self)
+        main_action.setMenu(submenu)
+        self.script_menus[display_name] = submenu
+        
+        return main_action
     
-    def _add_select_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
-        """Add a SELECT script as a submenu with all options"""
-        button_options = metadata.get('button_options')
-        if not button_options or not hasattr(button_options, 'options') or not button_options.options:
-            # Fallback to simple execution if no options defined
-            self._add_run_script(script, original_name, display_name, metadata)
-            return
-        
-        # Create submenu for select options - include emoji and hotkey in submenu title
-        emoji = self._get_effective_emoji_for_script(original_name)
-        emoji_prefix = f"{emoji} " if emoji else ""
-        
-        hotkey = self.hotkey_registry.get_hotkey(original_name)
-        if hotkey:
-            # Use tab character for alignment in monospace font, with visual formatting
-            submenu_title = f"{emoji_prefix}{display_name}\t│ {hotkey}"
-        else:
-            submenu_title = f"{emoji_prefix}{display_name}"
-        submenu = QMenu(submenu_title, self.context_menu)
-        
+    def _execute_simple_script(self, script_info: ScriptInfo):
+        """Execute a simple script without arguments"""
         try:
-            current_status = script.get_status()
-        except:
-            current_status = ""
-        
-        for option in button_options.options:
-            option_action = QAction(option, self)
-            option_action.setCheckable(True)
+            logger.info(f"Executing simple script: {script_info.display_name}")
             
-            # Check current option
-            if current_status and (option.lower() in current_status.lower() or 
-                                   current_status.lower() in option.lower()):
-                option_action.setChecked(True)
-            
-            option_action.triggered.connect(
-                lambda checked, s=script, opt=option: self._execute_script(s, opt)
-            )
-            
-            self.script_actions[option_action] = script
-            submenu.addAction(option_action)
-        
-        # Store the submenu for status updates
-        self.script_menus[script] = submenu
-        self.context_menu.addMenu(submenu)
-    
-    def _add_number_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
-        """Add a NUMBER script that shows input dialog when clicked"""
-        # Get emoji for this script
-        emoji = self._get_effective_emoji_for_script(original_name)
-        emoji_prefix = f"{emoji} " if emoji else ""
-        
-        # Get hotkey for this script (using original name)
-        hotkey = self.hotkey_registry.get_hotkey(original_name)
-        if hotkey:
-            # Use tab character for alignment in monospace font, with visual formatting
-            menu_text = f"{emoji_prefix}{display_name}\t│ {hotkey}"
-        else:
-            menu_text = f"{emoji_prefix}{display_name}"
-        
-        action = QAction(menu_text, self)
-        action.setToolTip(f"{metadata.get('description', '')} (Click to set value)")
-        action.triggered.connect(lambda checked, s=script: self._execute_number_script(s, metadata))
-        
-        self.script_actions[action] = script
-        self.context_menu.addAction(action)
-    
-    def _add_text_input_script(self, script: UtilityScript, original_name: str, display_name: str, metadata: dict):
-        """Add a TEXT_INPUT script that shows input dialog when clicked"""
-        # Get emoji for this script
-        emoji = self._get_effective_emoji_for_script(original_name)
-        emoji_prefix = f"{emoji} " if emoji else ""
-        
-        # Get hotkey for this script (using original name)
-        hotkey = self.hotkey_registry.get_hotkey(original_name)
-        if hotkey:
-            # Use tab character for alignment in monospace font, with visual formatting
-            menu_text = f"{emoji_prefix}{display_name}\t│ {hotkey}"
-        else:
-            menu_text = f"{emoji_prefix}{display_name}"
-        
-        action = QAction(menu_text, self)
-        action.setToolTip(f"{metadata.get('description', '')} (Click to enter text)")
-        action.triggered.connect(lambda checked, s=script: self._execute_text_input_script(s, metadata))
-        
-        self.script_actions[action] = script
-        self.context_menu.addAction(action)
-    
-    def _execute_script(self, script: UtilityScript, *args, **kwargs):
-        try:
-            metadata = script.get_metadata()
-            script_name = metadata.get('name', 'Unknown')
-            
-            logger.info(f"Executing script from tray: {script_name}")
-            if args:
-                logger.info(f"  Args: {args}")
-            if kwargs:
-                logger.info(f"  Kwargs: {kwargs}")
-            
-            # Execute script with provided parameters
-            result = script.execute(*args, **kwargs)
+            result = self.script_loader.execute_script(script_info.file_path.stem)
             
             # Show notification if enabled
             if self.settings.should_show_notifications():
                 if result.get('success'):
                     self.show_notification(
-                        f"Script Executed: {script_name}",
+                        f"Script Executed: {script_info.display_name}",
                         result.get('message', 'Completed successfully')
                     )
                 else:
                     self.show_notification(
-                        f"Script Failed: {script_name}",
+                        f"Script Failed: {script_info.display_name}",
                         result.get('message', 'Execution failed'),
                         QSystemTrayIcon.MessageIcon.Warning
                     )
             
-            self.script_executed.emit(script_name, result)
-            
-            # Update script status in menu
-            self._update_script_statuses()
+            self.script_executed.emit(script_info.display_name, result)
             
         except Exception as e:
-            logger.error(f"Error executing script from tray: {e}")
+            error_msg = f"Error executing script {script_info.display_name}: {str(e)}"
+            logger.error(error_msg)
             if self.settings.should_show_notifications():
                 self.show_notification(
-                    "Script Error",
+                    f"Script Error: {script_info.display_name}",
                     str(e),
                     QSystemTrayIcon.MessageIcon.Critical
                 )
     
-    def _execute_toggle_script(self, script: UtilityScript):
-        """Execute a toggle script by determining current state and flipping it"""
+    def _execute_script_with_choice(self, script_info: ScriptInfo, arg_name: str, choice: str):
+        """Execute script with a specific choice value"""
         try:
-            status = script.get_status()
-            current_state = status and status.lower() in ['on', 'enabled', 'true', 'active']
-            # Toggle to opposite state
-            self._execute_script(script, not current_state)
-        except Exception as e:
-            logger.error(f"Error toggling script: {e}")
-            # Fallback to simple execution
-            self._execute_script(script)
-    
-    def _execute_number_script(self, script: UtilityScript, metadata: dict):
-        """Execute a number script by showing input dialog"""
-        try:
-            button_options = metadata.get('button_options')
+            logger.info(f"Executing script {script_info.display_name} with {arg_name}={choice}")
             
-            # Set up dialog parameters
-            if button_options:
-                min_val = getattr(button_options, 'min_value', None)
-                max_val = getattr(button_options, 'max_value', None)
-                decimals = getattr(button_options, 'decimals', 0)
-                suffix = getattr(button_options, 'suffix', '')
-            else:
-                min_val = max_val = None
-                decimals = 0
-                suffix = ''
+            arguments = {arg_name: choice}
+            result = self.script_loader.execute_script(script_info.file_path.stem, arguments)
             
-            # Get current value for default
-            try:
-                current_status = script.get_status()
-                # Try to extract number from status
-                import re
-                numbers = re.findall(r'-?\d+\.?\d*', current_status)
-                default_value = float(numbers[0]) if numbers else 0.0
-            except:
-                default_value = 0.0
-            
-            # Show input dialog
-            if decimals > 0:
-                value, ok = QInputDialog.getDouble(
-                    None, 
-                    f"Set {metadata.get('name', 'Value')}", 
-                    f"Enter value{' (' + suffix + ')' if suffix else ''}:",
-                    default_value,
-                    min_val if min_val is not None else -2147483647,
-                    max_val if max_val is not None else 2147483647,
-                    decimals
-                )
-            else:
-                value, ok = QInputDialog.getInt(
-                    None,
-                    f"Set {metadata.get('name', 'Value')}",
-                    f"Enter value{' (' + suffix + ')' if suffix else ''}:",
-                    int(default_value),
-                    int(min_val) if min_val is not None else -2147483647,
-                    int(max_val) if max_val is not None else 2147483647
-                )
-            
-            if ok:
-                self._execute_script(script, value)
-                
-        except Exception as e:
-            logger.error(f"Error showing number input dialog: {e}")
-            # Fallback to simple execution
-            self._execute_script(script)
-    
-    def _execute_text_input_script(self, script: UtilityScript, metadata: dict):
-        """Execute a text input script by showing input dialog"""
-        try:
-            button_options = metadata.get('button_options')
-            
-            if button_options:
-                placeholder = getattr(button_options, 'placeholder', 'Enter text...')
-                multiline = getattr(button_options, 'multiline', False)
-            else:
-                placeholder = 'Enter text...'
-                multiline = False
-            
-            # Get current value for default
-            try:
-                current_status = script.get_status()
-                default_text = current_status if current_status and current_status != 'Unknown' else ''
-            except:
-                default_text = ''
-            
-            # Show input dialog
-            if multiline:
-                text, ok = QInputDialog.getMultiLineText(
-                    None,
-                    f"Set {metadata.get('name', 'Text')}",
-                    f"{placeholder}:",
-                    default_text
-                )
-            else:
-                text, ok = QInputDialog.getText(
-                    None,
-                    f"Set {metadata.get('name', 'Text')}",
-                    f"{placeholder}:",
-                    text=default_text
-                )
-            
-            if ok and text:
-                self._execute_script(script, text)
-                
-        except Exception as e:
-            logger.error(f"Error showing text input dialog: {e}")
-            # Fallback to simple execution
-            self._execute_script(script)
-    
-    def _update_script_statuses(self):
-        """Update script status display in menu items"""
-        logger.debug(f"Updating status for {len(self.script_actions)} script actions and {len(self.script_menus)} script menus")
-        
-        # Track which scripts we've already processed to avoid duplicates
-        processed_scripts = set()
-        
-        # Update CYCLE and SELECT scripts via their submenus
-        for script, submenu in self.script_menus.items():
-            if script in processed_scripts:
-                continue
-            processed_scripts.add(script)
-            
-            try:
-                # Update submenu title to show emoji and hotkey with alignment
-                metadata = script.get_metadata()
-                original_name = metadata.get('name', 'Unknown Script')
-                display_name = self.script_loader.get_script_display_name(script)
-                emoji = self._get_effective_emoji_for_script(original_name)
-                emoji_prefix = f"{emoji} " if emoji else ""
-                
-                hotkey = self.hotkey_registry.get_hotkey(original_name)
-                if hotkey:
-                    # Use tab character for alignment in monospace font
-                    submenu_title = f"{emoji_prefix}{display_name}\t│ {hotkey}"
+            # Show notification if enabled
+            if self.settings.should_show_notifications():
+                if result.get('success'):
+                    self.show_notification(
+                        f"Script Executed: {script_info.display_name}",
+                        result.get('message', f'Executed with {choice}')
+                    )
                 else:
-                    submenu_title = f"{emoji_prefix}{display_name}"
-                submenu.setTitle(submenu_title)
-                
-                # Update option checkmarks based on current status
-                current_status = script.get_status()
-                for menu_action in submenu.actions():
-                    option_text = menu_action.text()
-                    if current_status and (option_text.lower() in current_status.lower() or 
-                                         current_status.lower() in option_text.lower()):
-                        menu_action.setChecked(True)
-                    else:
-                        menu_action.setChecked(False)
-            except Exception as e:
-                logger.error(f"Error updating submenu status for script: {e}")
-        
-        # Update other script types (RUN, TOGGLE, NUMBER, TEXT_INPUT)
-        for action, script in self.script_actions.items():
-            if script in processed_scripts:
-                continue  # Skip CYCLE/SELECT scripts already processed above
-                
-            try:
-                metadata = script.get_metadata()
-                original_name = metadata.get('name', 'Unknown Script')
-                display_name = self.script_loader.get_script_display_name(script)
-                button_type = metadata.get('button_type', ButtonType.RUN)
-                
-                # Update action text to show emoji and hotkey with alignment
-                emoji = self._get_effective_emoji_for_script(original_name)
-                emoji_prefix = f"{emoji} " if emoji else ""
-                
-                hotkey = self.hotkey_registry.get_hotkey(original_name)
-                if hotkey:
-                    # Use tab character for alignment in monospace font, with visual formatting
-                    action.setText(f"{emoji_prefix}{display_name}\t│ {hotkey}")
-                else:
-                    action.setText(f"{emoji_prefix}{display_name}")
-                processed_scripts.add(script)
-                        
-            except Exception as e:
-                logger.error(f"Error updating status for script action: {e}")
-    
-    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
-        if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            # Left click - show context menu (same as right click)
-            self._show_context_menu()
-        elif reason == QSystemTrayIcon.ActivationReason.Context:
-            # Right click - context menu (handled automatically)
-            pass
-        elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            # Double click - show context menu
-            self._show_context_menu()
-    
-    def _show_context_menu(self):
-        """Show the context menu at cursor position"""
-        cursor_pos = self.parent.cursor().pos() if self.parent else None
-        if cursor_pos:
-            self.context_menu.popup(cursor_pos)
-        else:
-            # Fallback to showing at tray icon position
-            self.context_menu.popup(self.tray_icon.geometry().center())
-    
-    
-    def show_notification(self, title: str, message: str, 
-                         icon: QSystemTrayIcon.MessageIcon = QSystemTrayIcon.MessageIcon.Information):
-        if self.tray_icon.isSystemTrayAvailable():
-            self.tray_icon.showMessage(title, message, icon, 3000)
-    
-    def _update_menu_font(self):
-        """Update the menu font based on application settings"""
-        font_family = self.settings.get_font_family()
-        font_size = self.settings.get_font_size()
-        
-        # For menu alignment, we need monospace font for proper tab alignment
-        # But we can use the user's selected font if it's monospace, or fallback to system monospace
-        if font_family and font_family != 'System Default':
-            # Check if the selected font is monospace-compatible
-            from PyQt6.QtGui import QFontMetrics, QFont
-            test_font = QFont(font_family, font_size)
-            metrics = QFontMetrics(test_font)
+                    self.show_notification(
+                        f"Script Failed: {script_info.display_name}",
+                        result.get('message', 'Execution failed'),
+                        QSystemTrayIcon.MessageIcon.Warning
+                    )
             
-            # Test if characters have similar widths (monospace check)
-            w_width = metrics.horizontalAdvance('W')
-            i_width = metrics.horizontalAdvance('i')
+            self.script_executed.emit(script_info.display_name, result)
             
-            if abs(w_width - i_width) < 2:  # Close enough to be monospace
-                menu_font = f"'{font_family}'"
-            else:
-                # Use user font but add monospace fallback for alignment
-                menu_font = f"'{font_family}', 'Courier New', 'Consolas', monospace"
-        else:
-            # System default - use monospace for alignment
-            menu_font = "'Courier New', 'Consolas', 'Lucida Console', monospace"
-        
-        self.context_menu.setStyleSheet(f"""
-            QMenu {{
-                font-family: {menu_font};
-                font-size: {font_size}pt;
-                background-color: #ffffff;
-                border: 1px solid #cccccc;
-                padding: 2px;
-            }}
-            QMenu::item {{
-                padding: 4px 12px;
-                color: #000000;
-                background-color: transparent;
-                border: none;
-            }}
-            QMenu::item:selected {{
-                background-color: #0078d4;
-                color: #ffffff;
-            }}
-            QMenu::item:disabled {{
-                color: #888888;
-            }}
-            QMenu::separator {{
-                height: 1px;
-                background: #e0e0e0;
-                margin: 2px 0px;
-            }}
-        """)
-        
-        logger.info(f"Updated tray menu font: {menu_font}, {font_size}pt")
-    
-    def update_font_settings(self):
-        """Public method to update font settings when they change"""
-        self._update_menu_font()
-    
-    def cleanup(self):
-        self.refresh_timer.stop()
-        self.hotkey_manager.stop()
-        self.tray_icon.hide()
-    
-    def _register_hotkeys(self):
-        """Register all configured hotkeys for scripts"""
-        if not self.script_loader:
-            return
-        
-        # Validate mappings first (remove orphaned ones)
-        self.hotkey_registry.validate_mappings(self.script_loader)
-        
-        # Clear existing hotkeys
-        self.hotkey_manager.unregister_all()
-        
-        # Register each configured hotkey
-        hotkey_mappings = self.hotkey_registry.get_all_mappings()
-        
-        for script_name, hotkey_string in hotkey_mappings.items():
-            if script_name in self.script_name_to_instance:
-                success = self.hotkey_manager.register_hotkey(script_name, hotkey_string)
-                if success:
-                    logger.info(f"Registered hotkey {hotkey_string} for {script_name}")
-                else:
-                    logger.warning(f"Failed to register hotkey {hotkey_string} for {script_name}")
-            else:
-                logger.warning(f"Script {script_name} has hotkey but is not loaded")
-    
-    def refresh_hotkeys(self):
-        """Refresh hotkey registrations (called when settings change)"""
-        self._register_hotkeys()
-    
-    def _on_hotkey_triggered(self, script_name: str, hotkey_string: str):
-        """Handle hotkey trigger events"""
-        logger.info(f"Hotkey {hotkey_string} triggered for script {script_name}")
-        
-        # Find the script instance
-        script = self.script_name_to_instance.get(script_name)
-        
-        if script:
-            # Execute the script
-            self._execute_script(script)
-        else:
-            logger.error(f"Script {script_name} not found for hotkey execution")
+        except Exception as e:
+            error_msg = f"Error executing script {script_info.display_name}: {str(e)}"
+            logger.error(error_msg)
             if self.settings.should_show_notifications():
                 self.show_notification(
-                    "Hotkey Error",
-                    f"Script '{script_name}' not found",
-                    QSystemTrayIcon.MessageIcon.Warning
+                    f"Script Error: {script_info.display_name}",
+                    str(e),
+                    QSystemTrayIcon.MessageIcon.Critical
                 )
     
-    def _on_hotkey_registration_failed(self, hotkey_string: str, error_message: str):
-        """Handle hotkey registration failures"""
-        logger.error(f"Hotkey registration failed: {hotkey_string} - {error_message}")
+    def _execute_script_with_dialog(self, script_info: ScriptInfo):
+        """Execute script by showing input dialog for arguments"""
+        try:
+            # Get currently configured arguments
+            current_args = self.script_loader.get_script_arguments(script_info.file_path.stem)
+            
+            # For now, execute with current settings
+            # TODO: Add dialog for argument configuration
+            logger.info(f"Executing script {script_info.display_name} with current arguments")
+            
+            result = self.script_loader.execute_script(script_info.file_path.stem, current_args)
+            
+            # Show notification if enabled
+            if self.settings.should_show_notifications():
+                if result.get('success'):
+                    self.show_notification(
+                        f"Script Executed: {script_info.display_name}",
+                        result.get('message', 'Completed successfully')
+                    )
+                else:
+                    self.show_notification(
+                        f"Script Failed: {script_info.display_name}",
+                        result.get('message', 'Execution failed'),
+                        QSystemTrayIcon.MessageIcon.Warning
+                    )
+            
+            self.script_executed.emit(script_info.display_name, result)
+            
+        except Exception as e:
+            error_msg = f"Error executing script {script_info.display_name}: {str(e)}"
+            logger.error(error_msg)
+            if self.settings.should_show_notifications():
+                self.show_notification(
+                    f"Script Error: {script_info.display_name}",
+                    str(e),
+                    QSystemTrayIcon.MessageIcon.Critical
+                )
+    
+    def _update_script_statuses(self):
+        """Update script status displays in menu"""
+        try:
+            for display_name, action in self.script_actions.items():
+                if display_name in self.script_name_to_info:
+                    script_info = self.script_name_to_info[display_name]
+                    status = self.script_loader.get_script_status(script_info.file_path.stem)
+                    
+                    # Update action text with current status
+                    emoji = self._get_effective_emoji_for_script(display_name)
+                    display_text = f"{emoji}  {display_name}" if emoji else display_name
+                    if status and status != "Ready":
+                        display_text += f" [{status}]"
+                    
+                    action.setText(display_text)
+        except Exception as e:
+            logger.debug(f"Error updating script statuses: {e}")
+    
+    def _register_hotkeys(self):
+        """Register hotkeys for scripts"""
+        try:
+            # Clear existing hotkeys
+            self.hotkey_manager.unregister_all()
+            
+            # Register hotkeys for each script
+            for script_info in self.scripts:
+                display_name = self.script_loader.get_script_display_name(script_info)
+                hotkey = self.hotkey_registry.get_hotkey(display_name)
+                if hotkey:
+                    self.hotkey_manager.register_hotkey(display_name, hotkey)
+                    logger.debug(f"Registered hotkey {hotkey} for script {display_name}")
+            
+        except Exception as e:
+            logger.error(f"Error registering hotkeys: {e}")
+    
+    def _on_hotkey_triggered(self, script_name: str):
+        """Handle hotkey triggered for a script"""
+        try:
+            logger.info(f"Hotkey triggered for script: {script_name}")
+            if script_name in self.script_name_to_info:
+                script_info = self.script_name_to_info[script_name]
+                if script_info.arguments:
+                    self._execute_script_with_dialog(script_info)
+                else:
+                    self._execute_simple_script(script_info)
+        except Exception as e:
+            logger.error(f"Error executing script from hotkey {script_name}: {e}")
+    
+    def _on_hotkey_registration_failed(self, script_name: str, hotkey: str, error: str):
+        """Handle hotkey registration failure"""
+        logger.warning(f"Failed to register hotkey {hotkey} for {script_name}: {error}")
+    
+    def _on_tray_activated(self, reason):
+        """Handle tray icon activation"""
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            # Double click shows the menu
+            self.context_menu.popup(self.tray_icon.geometry().center())
+    
+    def show_notification(self, title: str, message: str, icon: QSystemTrayIcon.MessageIcon = QSystemTrayIcon.MessageIcon.Information):
+        """Show system tray notification"""
+        if self.tray_icon.supportsMessages():
+            self.tray_icon.showMessage(title, message, icon, 3000)
+    
+    def update_font_settings(self):
+        """Update font settings for tray menu"""
+        self._update_menu_font()
+        logger.debug("Font settings updated for tray menu")
+    
+    def refresh_hotkeys(self):
+        """Refresh hotkey registrations (called when hotkeys change)"""
+        logger.debug("Refreshing hotkeys...")
+        self._register_hotkeys()
+    
+    def cleanup(self):
+        """Cleanup resources"""
+        if self.refresh_timer:
+            self.refresh_timer.stop()
         
-        # Always show registration failures as they're important feedback
-        self.show_notification(
-            "Hotkey Registration Failed",
-            f"{hotkey_string}: {error_message}",
-            QSystemTrayIcon.MessageIcon.Warning
-        )
+        if self.hotkey_manager:
+            self.hotkey_manager.cleanup()
+        
+        self.tray_icon.hide()
+        logger.info("TrayManager cleaned up")

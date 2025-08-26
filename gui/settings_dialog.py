@@ -353,14 +353,14 @@ class SettingsDialog(QDialog):
         scripts = self.script_loader.discover_scripts()
         
         # Populate table
-        for script in scripts:
+        for script_info in scripts:
             try:
-                metadata = script.get_metadata()
-                original_name = metadata.get('name', 'Unknown')
-                description = metadata.get('description', '')
+                # Use ScriptInfo properties directly
+                original_name = script_info.display_name
+                description = f"Script: {script_info.file_path.name}"
                 
                 # Get effective display name (custom or original)
-                display_name = self.script_loader.get_script_display_name(script)
+                display_name = self.script_loader.get_script_display_name(script_info)
                 
                 # Get current hotkey for this script
                 hotkey = self.hotkey_registry.get_hotkey(original_name)
@@ -371,7 +371,7 @@ class SettingsDialog(QDialog):
                 
                 # Original script name
                 name_item = QTableWidgetItem(original_name)
-                name_item.setData(Qt.ItemDataRole.UserRole, script)  # Store script reference
+                name_item.setData(Qt.ItemDataRole.UserRole, script_info)  # Store script reference
                 name_item.setForeground(Qt.GlobalColor.white)
                 self.hotkeys_table.setItem(row_position, 0, name_item)
                 
@@ -411,6 +411,8 @@ class SettingsDialog(QDialog):
                 
             except Exception as e:
                 logger.error(f"Error adding script to hotkeys table: {e}")
+                import traceback
+                traceback.print_exc()
     
     def _on_hotkey_cell_clicked(self, row: int, column: int):
         """Handle clicks on display name and hotkey cells"""
@@ -445,7 +447,7 @@ class SettingsDialog(QDialog):
             if new_name != original_name:
                 # Get all script names for conflict validation
                 scripts = self.script_loader.discover_scripts()
-                script_names = [script.name for script in scripts]
+                script_names = [script_info.display_name for script_info in scripts]
                 
                 # Set custom name with validation
                 if not self.settings.set_custom_name(original_name, new_name, script_names):
@@ -559,11 +561,11 @@ class SettingsDialog(QDialog):
         scripts = self.script_loader.discover_scripts()
         
         # Populate table
-        for script in scripts:
+        for script_info in scripts:
             try:
-                metadata = script.get_metadata()
-                original_name = metadata.get('name', 'Unknown')
-                description = metadata.get('description', '')
+                # Use ScriptInfo properties directly
+                original_name = script_info.display_name
+                description = f"Script: {script_info.file_path.name}"
                 
                 # Get current emoji (custom or default)
                 current_emoji = self._get_effective_emoji_for_script(original_name)
@@ -574,7 +576,7 @@ class SettingsDialog(QDialog):
                 
                 # Script name
                 name_item = QTableWidgetItem(original_name)
-                name_item.setData(Qt.ItemDataRole.UserRole, script)
+                name_item.setData(Qt.ItemDataRole.UserRole, script_info)
                 name_item.setForeground(Qt.GlobalColor.white)
                 self.icons_table.setItem(row_position, 0, name_item)
                 
@@ -612,7 +614,7 @@ class SettingsDialog(QDialog):
                 self.icons_table.setCellWidget(row_position, 3, actions_widget)
                 
                 # Preview (showing what it would look like in tray)
-                display_name = self.script_loader.get_script_display_name(script)
+                display_name = self.script_loader.get_script_display_name(script_info)
                 preview_text = f"{current_emoji} {display_name}" if current_emoji else display_name
                 preview_item = QTableWidgetItem(preview_text)
                 preview_item.setForeground(Qt.GlobalColor.lightGray)
@@ -625,6 +627,8 @@ class SettingsDialog(QDialog):
                 
             except Exception as e:
                 logger.error(f"Error adding script to icons table: {e}")
+                import traceback
+                traceback.print_exc()
     
     def _get_effective_emoji_for_script(self, script_name: str) -> str:
         """Get effective emoji for script (custom or default)"""
@@ -731,8 +735,8 @@ class SettingsDialog(QDialog):
             # Get script for display name
             name_item = self.icons_table.item(row, 0)
             if name_item:
-                script = name_item.data(Qt.ItemDataRole.UserRole)
-                if script:
-                    display_name = self.script_loader.get_script_display_name(script)
+                script_info = name_item.data(Qt.ItemDataRole.UserRole)
+                if script_info:
+                    display_name = self.script_loader.get_script_display_name(script_info)
                     preview_text = f"{emoji} {display_name}" if emoji else display_name
                     preview_item.setText(preview_text)
