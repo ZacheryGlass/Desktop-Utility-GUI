@@ -35,7 +35,7 @@ class SettingsDialog(QDialog):
     def init_ui(self):
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.setMinimumSize(600, 500)
+        self.setMinimumSize(800, 500)
         
         layout = QVBoxLayout(self)
         
@@ -730,7 +730,7 @@ class SettingsDialog(QDialog):
                 emoji_item.setFont(font)
         
         # Update preview column
-        preview_item = self.icons_table.item(row, 4)
+        preview_item = self.icons_table.item(row, 3)
         if preview_item:
             # Get script for display name
             name_item = self.icons_table.item(row, 0)
