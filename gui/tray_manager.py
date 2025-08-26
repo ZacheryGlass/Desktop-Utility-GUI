@@ -3,7 +3,7 @@ from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (QSystemTrayIcon, QMenu, QApplication, 
                              QMessageBox, QWidget, QInputDialog)
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt, QRect
-from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QBrush, QPen, QScreen
+from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QBrush, QPen, QScreen, QCursor
 
 from core.script_loader import ScriptLoader
 from core.script_analyzer import ScriptInfo
@@ -130,20 +130,25 @@ class TrayManager(QObject):
     def _create_tray_icon(self):
         """Create the tray icon"""
         try:
-            pixmap = QPixmap(16, 16)
+            # Create a simple icon programmatically
+            pixmap = QPixmap(64, 64)
             pixmap.fill(Qt.GlobalColor.transparent)
             
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             
-            # Draw a simple gear icon
-            painter.setBrush(QBrush(Qt.GlobalColor.gray))
-            painter.setPen(QPen(Qt.GlobalColor.darkGray, 1))
+            # Draw a rounded rectangle background
+            painter.setBrush(QBrush(Qt.GlobalColor.lightGray))
+            painter.setPen(QPen(Qt.GlobalColor.darkCyan, 2))
+            painter.drawRoundedRect(4, 4, 56, 56, 10, 10)
             
-            # Draw gear teeth (simplified)
-            center_x, center_y = 8, 8
-            painter.drawEllipse(center_x - 6, center_y - 6, 12, 12)
-            painter.drawEllipse(center_x - 3, center_y - 3, 6, 6)
+            # Draw "DU" text
+            painter.setPen(QPen(Qt.GlobalColor.black, 2))
+            font = painter.font()
+            font.setPointSize(20)
+            font.setBold(True)
+            painter.setFont(font)
+            painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "DU")
             
             painter.end()
             
@@ -152,7 +157,9 @@ class TrayManager(QObject):
         except Exception as e:
             logger.error(f"Error creating tray icon: {e}")
             # Fallback to system icon
-            self.tray_icon.setIcon(self.style().standardIcon(QApplication.style().standardIcon.SP_ComputerIcon))
+            app = QApplication.instance()
+            if app:
+                self.tray_icon.setIcon(app.style().standardIcon(app.style().StandardPixmap.SP_ComputerIcon))
     
     def _update_menu_font(self):
         """Update menu font based on settings"""
@@ -487,8 +494,12 @@ class TrayManager(QObject):
     
     def _on_tray_activated(self, reason):
         """Handle tray icon activation"""
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            # Double click shows the menu
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            # Left click - show context menu at cursor position
+            cursor_pos = QCursor.pos()
+            self.context_menu.popup(cursor_pos)
+        elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            # Double click also shows the menu
             self.context_menu.popup(self.tray_icon.geometry().center())
     
     def show_notification(self, title: str, message: str, icon: QSystemTrayIcon.MessageIcon = QSystemTrayIcon.MessageIcon.Information):
