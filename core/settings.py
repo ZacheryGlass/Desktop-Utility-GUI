@@ -39,6 +39,10 @@ class SettingsManager(QObject):
         'emoji_icons': {
             # Script emoji icons will be stored as 'emoji_icons/ScriptName': '🔊'
             # This is just a placeholder for the schema
+        },
+        'script_arguments': {
+            # Script arguments will be stored as 'script_arguments/ScriptName/ArgName': 'value'
+            # This is just a placeholder for the schema
         }
     }
     
@@ -271,3 +275,83 @@ class SettingsManager(QObject):
     def get_effective_emoji(self, script_name: str) -> Optional[str]:
         """Get the effective emoji for a script (custom if set, otherwise None for default logic)."""
         return self.get_script_emoji(script_name)
+    
+    # Script arguments methods
+    def get_script_arguments(self, script_name: str) -> Dict[str, Any]:
+        """Get all configured arguments for a script."""
+        result = {}
+        self.settings.beginGroup(f'script_arguments/{script_name}')
+        try:
+            for key in self.settings.allKeys():
+                value = self.settings.value(key)
+                # Convert string booleans and numbers back to proper types
+                if isinstance(value, str):
+                    if value.lower() == 'true':
+                        value = True
+                    elif value.lower() == 'false':
+                        value = False
+                    else:
+                        # Try to convert to number
+                        try:
+                            if '.' in value:
+                                value = float(value)
+                            else:
+                                value = int(value)
+                        except ValueError:
+                            pass  # Keep as string
+                result[key] = value
+        finally:
+            self.settings.endGroup()
+        return result
+    
+    def set_script_arguments(self, script_name: str, arguments: Dict[str, Any]) -> None:
+        """Set all arguments for a script, replacing existing ones."""
+        # Remove existing arguments for this script
+        self.settings.beginGroup(f'script_arguments/{script_name}')
+        try:
+            self.settings.remove('')  # Remove all keys in this group
+        finally:
+            self.settings.endGroup()
+        
+        # Set new arguments
+        for arg_name, value in arguments.items():
+            self.set_script_argument(script_name, arg_name, value)
+    
+    def set_script_argument(self, script_name: str, arg_name: str, value: Any) -> None:
+        """Set a specific argument value for a script."""
+        key = f'script_arguments/{script_name}/{arg_name}'
+        self.set(key, value)
+    
+    def get_script_argument(self, script_name: str, arg_name: str, default: Any = None) -> Any:
+        """Get a specific argument value for a script."""
+        key = f'script_arguments/{script_name}/{arg_name}'
+        return self.get(key, default)
+    
+    def remove_script_argument(self, script_name: str, arg_name: str) -> None:
+        """Remove a specific argument for a script."""
+        key = f'script_arguments/{script_name}/{arg_name}'
+        if self.settings.contains(key):
+            self.settings.remove(key)
+            self.settings.sync()
+            logger.debug(f"Removed argument {arg_name} for script: {script_name}")
+    
+    def remove_all_script_arguments(self, script_name: str) -> None:
+        """Remove all arguments for a script."""
+        self.settings.beginGroup(f'script_arguments/{script_name}')
+        try:
+            self.settings.remove('')  # Remove all keys in this group
+            self.settings.sync()
+            logger.debug(f"Removed all arguments for script: {script_name}")
+        finally:
+            self.settings.endGroup()
+    
+    def get_all_scripts_with_arguments(self) -> Dict[str, Dict[str, Any]]:
+        """Get all scripts that have configured arguments."""
+        result = {}
+        self.settings.beginGroup('script_arguments')
+        try:
+            for script_name in self.settings.childGroups():
+                result[script_name] = self.get_script_arguments(script_name)
+        finally:
+            self.settings.endGroup()
+        return result
