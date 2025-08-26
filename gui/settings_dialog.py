@@ -165,8 +165,8 @@ class SettingsDialog(QDialog):
         
         # Create table for hotkey configuration
         self.hotkeys_table = QTableWidget()
-        self.hotkeys_table.setColumnCount(4)
-        self.hotkeys_table.setHorizontalHeaderLabels(["Script", "Display Name", "Hotkey", "Actions"])
+        self.hotkeys_table.setColumnCount(3)
+        self.hotkeys_table.setHorizontalHeaderLabels(["Script", "Display Name", "Hotkey"])
         
         # Set table styling for better visibility
         self.hotkeys_table.setStyleSheet("""
@@ -194,12 +194,10 @@ class SettingsDialog(QDialog):
         # Configure table
         self.hotkeys_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.hotkeys_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.hotkeys_table.horizontalHeader().setStretchLastSection(False)
+        self.hotkeys_table.horizontalHeader().setStretchLastSection(True)
         self.hotkeys_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.hotkeys_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.hotkeys_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        self.hotkeys_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.hotkeys_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         
         # Connect cell click handler
         self.hotkeys_table.cellClicked.connect(self._on_hotkey_cell_clicked)
@@ -224,16 +222,16 @@ class SettingsDialog(QDialog):
         # Instructions
         instructions = QLabel(
             "Customize emoji icons for scripts in the system tray menu. "
-            "Click on an emoji cell to select a new emoji, or use the 'Set' button. "
-            "Use 'Reset' to restore the default emoji for a script."
+            "Click on an emoji cell to select a new emoji. "
+            "Right-click on an emoji cell to reset to default."
         )
         instructions.setWordWrap(True)
         layout.addWidget(instructions)
         
         # Create table for icon configuration
         self.icons_table = QTableWidget()
-        self.icons_table.setColumnCount(4)
-        self.icons_table.setHorizontalHeaderLabels(["Script", "Current Emoji", "Actions", "Preview"])
+        self.icons_table.setColumnCount(3)
+        self.icons_table.setHorizontalHeaderLabels(["Script", "Current Emoji", "Preview"])
         
         # Set table styling similar to hotkeys table
         self.icons_table.setStyleSheet("""
@@ -261,12 +259,17 @@ class SettingsDialog(QDialog):
         # Configure table
         self.icons_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.icons_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.icons_table.horizontalHeader().setStretchLastSection(False)
+        self.icons_table.horizontalHeader().setStretchLastSection(True)
         self.icons_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.icons_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.icons_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        self.icons_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.icons_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        
+        # Connect cell click handler for emoji selection
+        self.icons_table.cellClicked.connect(self._on_icon_cell_clicked)
+        
+        # Enable context menu for right-click reset
+        self.icons_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.icons_table.customContextMenuRequested.connect(self._on_icon_context_menu)
         
         layout.addWidget(self.icons_table)
         
@@ -357,6 +360,7 @@ class SettingsDialog(QDialog):
             try:
                 # Use ScriptInfo properties directly
                 original_name = script_info.display_name
+                script_filename = script_info.file_path.name
                 
                 # Get effective display name (custom or original)
                 display_name = self.script_loader.get_script_display_name(script_info)
@@ -368,8 +372,8 @@ class SettingsDialog(QDialog):
                 row_position = self.hotkeys_table.rowCount()
                 self.hotkeys_table.insertRow(row_position)
                 
-                # Original script name
-                name_item = QTableWidgetItem(original_name)
+                # Script filename
+                name_item = QTableWidgetItem(script_filename)
                 name_item.setData(Qt.ItemDataRole.UserRole, script_info)  # Store script reference
                 name_item.setForeground(Qt.GlobalColor.white)
                 self.hotkeys_table.setItem(row_position, 0, name_item)
@@ -396,12 +400,6 @@ class SettingsDialog(QDialog):
                     hotkey_item.setForeground(Qt.GlobalColor.white)
                 self.hotkeys_table.setItem(row_position, 2, hotkey_item)
                 
-                # Clear button
-                clear_button = QPushButton("Clear")
-                clear_button.setMaximumWidth(60)
-                clear_button.clicked.connect(lambda checked, row=row_position: self._clear_hotkey(row))
-                self.hotkeys_table.setCellWidget(row_position, 3, clear_button)
-                
             except Exception as e:
                 logger.error(f"Error adding script to hotkeys table: {e}")
                 import traceback
@@ -414,7 +412,11 @@ class SettingsDialog(QDialog):
         if not name_item:
             return
         
-        original_name = name_item.text()
+        # Get the original script name from the stored ScriptInfo
+        script_info = name_item.data(Qt.ItemDataRole.UserRole)
+        if not script_info:
+            return
+        original_name = script_info.display_name
         
         if column == 1:  # Display name column
             self._edit_display_name(row, original_name)
@@ -513,7 +515,7 @@ class SettingsDialog(QDialog):
                     self.hotkey_registry.remove_hotkey(script_name)
                 
                 # Update table display
-                hotkey_item = self.hotkeys_table.item(row, 3)
+                hotkey_item = self.hotkeys_table.item(row, 2)
                 if hotkey_item:
                     hotkey_item.setText(new_hotkey if new_hotkey else "(empty)")
                     hotkey_item.setForeground(
@@ -523,25 +525,35 @@ class SettingsDialog(QDialog):
                 # Mark that hotkeys have changed
                 self.hotkeys_changed.emit()
     
-    def _clear_hotkey(self, row: int):
-        """Clear the hotkey for a script"""
-        # Get script info
-        name_item = self.hotkeys_table.item(row, 0)
-        if not name_item:
+    def _on_icon_cell_clicked(self, row: int, column: int):
+        """Handle clicks on emoji cells"""
+        if column == 1:  # Current Emoji column
+            # Get script info
+            name_item = self.icons_table.item(row, 0)
+            if not name_item:
+                return
+            
+            script_name = name_item.text()
+            self._set_script_emoji(row)
+    
+    def _on_icon_context_menu(self, position):
+        """Handle right-click context menu on icons table"""
+        item = self.icons_table.itemAt(position)
+        if not item:
             return
         
-        script_name = name_item.text()
+        row = item.row()
+        column = item.column()
         
-        # Remove hotkey
-        if self.hotkey_registry.remove_hotkey(script_name):
-            # Update table display
-            hotkey_item = self.hotkeys_table.item(row, 3)
-            if hotkey_item:
-                hotkey_item.setText("(empty)")
-                hotkey_item.setForeground(Qt.GlobalColor.gray)
+        # Only show context menu for emoji column
+        if column == 1:
+            from PyQt6.QtWidgets import QMenu
+            menu = QMenu(self)
+            reset_action = menu.addAction("Reset to Default")
+            action = menu.exec(self.icons_table.mapToGlobal(position))
             
-            # Mark that hotkeys have changed
-            self.hotkeys_changed.emit()
+            if action == reset_action:
+                self._reset_script_emoji(row)
     
     def _refresh_icons_table(self):
         """Refresh the script icons table with current scripts"""
@@ -582,23 +594,6 @@ class SettingsDialog(QDialog):
                     emoji_item.setFont(font)
                 self.icons_table.setItem(row_position, 1, emoji_item)
                 
-                # Action buttons
-                actions_widget = QWidget()
-                actions_layout = QHBoxLayout(actions_widget)
-                actions_layout.setContentsMargins(2, 2, 2, 2)
-                
-                set_button = QPushButton("Set")
-                set_button.setMaximumWidth(50)
-                set_button.clicked.connect(lambda checked, row=row_position: self._set_script_emoji(row))
-                actions_layout.addWidget(set_button)
-                
-                reset_button = QPushButton("Reset")
-                reset_button.setMaximumWidth(50)
-                reset_button.clicked.connect(lambda checked, row=row_position: self._reset_script_emoji(row))
-                actions_layout.addWidget(reset_button)
-                
-                self.icons_table.setCellWidget(row_position, 2, actions_widget)
-                
                 # Preview (showing what it would look like in tray)
                 display_name = self.script_loader.get_script_display_name(script_info)
                 preview_text = f"{current_emoji} {display_name}" if current_emoji else display_name
@@ -609,7 +604,7 @@ class SettingsDialog(QDialog):
                     font = preview_item.font()
                     font.setPointSize(10)
                     preview_item.setFont(font)
-                self.icons_table.setItem(row_position, 3, preview_item)
+                self.icons_table.setItem(row_position, 2, preview_item)
                 
             except Exception as e:
                 logger.error(f"Error adding script to icons table: {e}")
@@ -716,7 +711,7 @@ class SettingsDialog(QDialog):
                 emoji_item.setFont(font)
         
         # Update preview column
-        preview_item = self.icons_table.item(row, 3)
+        preview_item = self.icons_table.item(row, 2)
         if preview_item:
             # Get script for display name
             name_item = self.icons_table.item(row, 0)
