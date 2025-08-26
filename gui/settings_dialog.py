@@ -165,8 +165,8 @@ class SettingsDialog(QDialog):
         
         # Create table for hotkey configuration
         self.hotkeys_table = QTableWidget()
-        self.hotkeys_table.setColumnCount(5)
-        self.hotkeys_table.setHorizontalHeaderLabels(["Script", "Display Name", "Description", "Hotkey", "Actions"])
+        self.hotkeys_table.setColumnCount(4)
+        self.hotkeys_table.setHorizontalHeaderLabels(["Script", "Display Name", "Hotkey", "Actions"])
         
         # Set table styling for better visibility
         self.hotkeys_table.setStyleSheet("""
@@ -232,8 +232,8 @@ class SettingsDialog(QDialog):
         
         # Create table for icon configuration
         self.icons_table = QTableWidget()
-        self.icons_table.setColumnCount(5)
-        self.icons_table.setHorizontalHeaderLabels(["Script", "Current Emoji", "Description", "Actions", "Preview"])
+        self.icons_table.setColumnCount(4)
+        self.icons_table.setHorizontalHeaderLabels(["Script", "Current Emoji", "Actions", "Preview"])
         
         # Set table styling similar to hotkeys table
         self.icons_table.setStyleSheet("""
@@ -357,7 +357,6 @@ class SettingsDialog(QDialog):
             try:
                 # Use ScriptInfo properties directly
                 original_name = script_info.display_name
-                description = f"Script: {script_info.file_path.name}"
                 
                 # Get effective display name (custom or original)
                 display_name = self.script_loader.get_script_display_name(script_info)
@@ -388,12 +387,6 @@ class SettingsDialog(QDialog):
                     display_item.setFont(font)
                 self.hotkeys_table.setItem(row_position, 1, display_item)
                 
-                # Description
-                desc_item = QTableWidgetItem(description)
-                desc_item.setToolTip(description)
-                desc_item.setForeground(Qt.GlobalColor.white)
-                self.hotkeys_table.setItem(row_position, 2, desc_item)
-                
                 # Hotkey
                 hotkey_item = QTableWidgetItem(hotkey if hotkey else "(empty)")
                 if not hotkey:
@@ -401,13 +394,13 @@ class SettingsDialog(QDialog):
                 else:
                     # Make sure hotkey text is white and visible
                     hotkey_item.setForeground(Qt.GlobalColor.white)
-                self.hotkeys_table.setItem(row_position, 3, hotkey_item)
+                self.hotkeys_table.setItem(row_position, 2, hotkey_item)
                 
                 # Clear button
                 clear_button = QPushButton("Clear")
                 clear_button.setMaximumWidth(60)
                 clear_button.clicked.connect(lambda checked, row=row_position: self._clear_hotkey(row))
-                self.hotkeys_table.setCellWidget(row_position, 4, clear_button)
+                self.hotkeys_table.setCellWidget(row_position, 3, clear_button)
                 
             except Exception as e:
                 logger.error(f"Error adding script to hotkeys table: {e}")
@@ -425,7 +418,7 @@ class SettingsDialog(QDialog):
         
         if column == 1:  # Display name column
             self._edit_display_name(row, original_name)
-        elif column == 3:  # Hotkey column
+        elif column == 2:  # Hotkey column
             self._edit_hotkey(row, original_name)
     
     def _edit_display_name(self, row: int, original_name: str):
@@ -565,7 +558,6 @@ class SettingsDialog(QDialog):
             try:
                 # Use ScriptInfo properties directly
                 original_name = script_info.display_name
-                description = f"Script: {script_info.file_path.name}"
                 
                 # Get current emoji (custom or default)
                 current_emoji = self._get_effective_emoji_for_script(original_name)
@@ -590,12 +582,6 @@ class SettingsDialog(QDialog):
                     emoji_item.setFont(font)
                 self.icons_table.setItem(row_position, 1, emoji_item)
                 
-                # Description
-                desc_item = QTableWidgetItem(description)
-                desc_item.setToolTip(description)
-                desc_item.setForeground(Qt.GlobalColor.white)
-                self.icons_table.setItem(row_position, 2, desc_item)
-                
                 # Action buttons
                 actions_widget = QWidget()
                 actions_layout = QHBoxLayout(actions_widget)
@@ -611,7 +597,7 @@ class SettingsDialog(QDialog):
                 reset_button.clicked.connect(lambda checked, row=row_position: self._reset_script_emoji(row))
                 actions_layout.addWidget(reset_button)
                 
-                self.icons_table.setCellWidget(row_position, 3, actions_widget)
+                self.icons_table.setCellWidget(row_position, 2, actions_widget)
                 
                 # Preview (showing what it would look like in tray)
                 display_name = self.script_loader.get_script_display_name(script_info)
@@ -623,7 +609,7 @@ class SettingsDialog(QDialog):
                     font = preview_item.font()
                     font.setPointSize(10)
                     preview_item.setFont(font)
-                self.icons_table.setItem(row_position, 4, preview_item)
+                self.icons_table.setItem(row_position, 3, preview_item)
                 
             except Exception as e:
                 logger.error(f"Error adding script to icons table: {e}")
