@@ -523,7 +523,7 @@ class TrayManager(QObject):
             self.refresh_timer.stop()
         
         if self.hotkey_manager:
-            self.hotkey_manager.cleanup()
+            self.hotkey_manager.stop()
         
         self.tray_icon.hide()
         logger.info("TrayManager cleaned up")
