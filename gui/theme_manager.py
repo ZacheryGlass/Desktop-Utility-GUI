@@ -1,1 +1,0 @@
-# This file has been removed - themes functionality has been eliminated

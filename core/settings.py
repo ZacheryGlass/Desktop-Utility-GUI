@@ -24,6 +24,10 @@ class SettingsManager(QObject):
             'single_instance': True,
             'show_script_notifications': True
         },
+        'execution': {
+            'script_timeout_seconds': 30,
+            'status_refresh_seconds': 5
+        },
         'hotkeys': {
             # Hotkey mappings will be stored as 'hotkeys/ScriptName': 'Ctrl+Alt+X'
             # This is just a placeholder for the schema
@@ -291,3 +295,20 @@ class SettingsManager(QObject):
         finally:
             self.settings.endGroup()
         return result
+    
+    # Execution timeout methods
+    def get_script_timeout_seconds(self) -> int:
+        """Get the timeout for script execution in seconds."""
+        return self.get('execution/script_timeout_seconds', 30)
+    
+    def get_status_refresh_seconds(self) -> int:
+        """Get the status refresh interval in seconds."""
+        return self.get('execution/status_refresh_seconds', 5)
+    
+    def set_script_timeout_seconds(self, seconds: int) -> None:
+        """Set the timeout for script execution in seconds."""
+        self.set('execution/script_timeout_seconds', seconds)
+    
+    def set_status_refresh_seconds(self, seconds: int) -> None:
+        """Set the status refresh interval in seconds."""
+        self.set('execution/status_refresh_seconds', seconds)

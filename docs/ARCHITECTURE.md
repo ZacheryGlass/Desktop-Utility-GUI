@@ -24,47 +24,117 @@ The Desktop Utility GUI is a modular PyQt6 application that automatically discov
 ## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Main Application                        │
-│                        (main.py)                             │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-        ┌─────────────▼──────────────┐
-        │      GUI Layer             │
-        │   (PyQt6 Components)       │
-        ├────────────────────────────┤
-        │  • MainWindow              │
-        │  • ScriptWidget            │
-        │  • ButtonFactory           │
-        │  • Styles                  │
-        └─────────────┬──────────────┘
-                      │
-        ┌─────────────▼──────────────┐
-        │      Core Layer            │
-        │  (Business Logic)          │
-        ├────────────────────────────┤
-        │  • ScriptLoader            │
-        │  • UtilityScript (Base)    │
-        │  • ButtonTypes             │
-        │  • Exceptions              │
-        └─────────────┬──────────────┘
-                      │
-        ┌─────────────▼──────────────┐
-        │     Scripts Layer          │
-        │  (Utility Implementations) │
-        ├────────────────────────────┤
-        │  • DisplayToggle           │
-        │  • VolumeControl           │
-        │  • PowerPlan               │
-        │  • [Custom Scripts...]      │
-        └────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                            Main Application                               │
+│                     (main.py + SingleApplication)                        │
+└────────────────┬──────────────────┬──────────────────────────────────────┘
+                 │                  │
+        ┌────────▼──────┐    ┌──────▼────────────────────────────────┐
+        │  GUI Layer    │    │          Core Services              │
+        │ (PyQt6)       │    │                                     │
+        ├───────────────┤    ├─────────────────────────────────────┤
+        │• TrayManager  │◄───┤• HotkeyManager (Windows API)       │
+        │• MainWindow   │    │• HotkeyRegistry (Settings)          │
+        │• SettingsDialog│    │• ScriptAnalyzer (AST)               │
+        │• HotkeyConfig │    │• ScriptExecutor (Multi-strategy)    │
+        │• ThemeManager │    │• ScriptLoader (Discovery)           │
+        └───────┬───────┘    │• Settings & StartupManager         │
+                │            └─────┬───────────────────────────────┘
+                │                  │
+                └──────────────────┼─────────────────────┐
+                                   │                     │
+        ┌──────────────────────────▼──────────┐    ┌────▼────────────────┐
+        │          Script System              │    │   Global Hotkeys   │
+        │                                     │    │                    │
+        ├─────────────────────────────────────┤    ├────────────────────┤
+        │• Legacy UtilityScript (Inherit)     │    │• Win32 API Hook    │
+        │• Standalone Scripts (AST Analysis)  │    │• Key Combinations  │
+        │• Mixed Execution Strategies:        │    │• Script Triggers   │
+        │  - Subprocess (argparse)            │    │• Registry Storage  │
+        │  - Function Call (main function)    │    │• Conflict Detection│
+        │  - Module Execution (import)        │    │• System Reserved   │
+        └─────────────────────────────────────┘    └────────────────────┘
 ```
 
 ## Core Components
 
-### 1. UtilityScript Base Class (`core/base_script.py`)
+### 1. Global Hotkey System
 
-Abstract base class that all utility scripts must inherit from.
+#### HotkeyManager (`core/hotkey_manager.py`)
+Manages Windows API integration for global hotkey registration.
+
+**Key Features**:
+- Windows RegisterHotKey/UnregisterHotKey API integration
+- Hidden Qt widget for receiving WM_HOTKEY messages
+- Support for modifier combinations (Ctrl, Alt, Shift, Win)
+- Automatic conflict detection and system-reserved key blocking
+- Real-time hotkey validation and normalization
+
+```python
+class HotkeyManager(QObject):
+    hotkey_triggered = pyqtSignal(str, str)  # script_name, hotkey_string
+    registration_failed = pyqtSignal(str, str)  # hotkey_string, error_message
+    
+    def register_hotkey(self, script_name: str, hotkey_string: str) -> bool
+    def unregister_hotkey(self, script_name: str) -> bool
+    def validate_hotkey_string(self, hotkey_string: str) -> Tuple[bool, str]
+```
+
+#### HotkeyRegistry (`core/hotkey_registry.py`)
+Manages persistent storage of hotkey mappings in QSettings.
+
+**Key Features**:
+- Persistent hotkey-to-script mapping storage
+- Conflict detection and validation
+- Orphaned hotkey cleanup when scripts are removed
+- Import/export functionality for backup and sharing
+
+```python
+class HotkeyRegistry(QObject):
+    def add_hotkey(self, script_name: str, hotkey_string: str) -> Tuple[bool, str]
+    def remove_hotkey(self, script_name: str) -> bool
+    def validate_mappings(self, script_loader: ScriptLoader) -> List[str]
+```
+
+### 2. Script Analysis & Execution System
+
+#### ScriptAnalyzer (`core/script_analyzer.py`)
+AST-based analysis of Python scripts to determine execution strategies.
+
+**Key Features**:
+- Automatic script structure analysis using Python AST
+- Argument detection from argparse or function signatures
+- Execution strategy determination (subprocess, function call, module exec)
+- Support for both legacy UtilityScript and standalone scripts
+
+```python
+class ScriptAnalyzer:
+    def analyze_script(self, script_path: Path) -> ScriptInfo
+    def _extract_argparse_arguments(self, tree: ast.AST) -> List[ArgumentInfo]
+    def _determine_execution_strategy(self, has_main_function: bool, 
+                                    has_main_block: bool, 
+                                    arguments: List[ArgumentInfo]) -> ExecutionStrategy
+```
+
+#### ScriptExecutor (`core/script_executor.py`)
+Flexible script execution engine supporting multiple strategies.
+
+**Execution Strategies**:
+- **SUBPROCESS**: Execute via subprocess with command-line arguments
+- **FUNCTION_CALL**: Import and call main function directly  
+- **MODULE_EXEC**: Import and execute entire module
+
+```python
+class ScriptExecutor:
+    def execute_script(self, script_info: ScriptInfo, 
+                      arguments: Optional[Dict[str, Any]] = None) -> ExecutionResult
+    def validate_arguments(self, script_info: ScriptInfo, 
+                          arguments: Dict[str, Any]) -> List[str]
+```
+
+### 3. Legacy UtilityScript Base Class (`core/base_script.py`)
+
+Abstract base class for backward compatibility with existing scripts.
 
 ```python
 class UtilityScript(ABC):
@@ -115,53 +185,74 @@ Responsible for dynamic script discovery and management:
 
 ## GUI Components
 
-### 1. MainWindow (`gui/main_window.py`)
+### 1. TrayManager (`gui/tray_manager.py`)
 
-The primary application window that:
-- Manages the overall UI layout
-- Coordinates script loading
-- Handles refresh operations
-- Manages the status bar
-- Implements 5-second auto-refresh timer
+The primary user interface component that manages the system tray:
+- **System Tray Icon**: Primary interface for user interaction
+- **Context Menus**: Dynamic script menus with real-time status updates
+- **Script Execution**: Handles script triggering from tray menus
+- **Hotkey Integration**: Connects global hotkeys to script execution
+- **Notifications**: Shows execution results and system messages
+- **Font Support**: Respects user font settings for menu appearance
 
-### 2. ScriptWidget (`gui/script_widget.py`)
+```python
+class TrayManager(QObject):
+    def refresh_scripts(self)  # Update available scripts
+    def refresh_hotkeys(self)  # Update hotkey registrations
+    def execute_script_by_name(self, script_name: str)  # Execute via hotkey
+    def show_notification(self, title: str, message: str)  # User feedback
+```
 
-Individual widget for each script that:
-- Displays script name and description
-- Shows current status
-- Creates appropriate control based on button type
-- Handles script execution in separate thread
-- Updates status display
+### 2. MainWindow (`gui/main_window.py`)
 
-### 3. ButtonFactory (`gui/button_factory.py`)
+Minimal window that serves as parent for dialogs and settings:
+- **Hidden by Default**: Not shown to user, exists only for dialog parenting
+- **Settings Coordination**: Manages settings dialog and preference changes
+- **Script Loading**: Coordinates script discovery and loading
+- **Hotkey Management**: Integrates hotkey system with tray manager
+- **Single Instance**: Ensures only one application instance runs
 
-Factory pattern implementation that creates appropriate Qt widgets based on ButtonType:
-- Maps ButtonType enum to Qt widget classes
-- Configures widgets with provided options
-- Connects callbacks for user interactions
-- Prevents unwanted triggers during programmatic updates
+### 3. HotkeyConfigurator (`gui/hotkey_configurator.py`)
 
-### 4. ScriptExecutor (`gui/script_widget.py`)
+GUI components for hotkey configuration:
 
-QThread subclass that:
-- Executes scripts in background thread
-- Prevents UI freezing during long operations
-- Emits signals for completion/error
-- Enables cancellation (future enhancement)
+#### HotkeyRecorder Widget
+- **Key Capture**: Real-time key combination recording
+- **Visual Feedback**: Shows current key combination as typed
+- **Validation**: Prevents invalid combinations and provides feedback
+- **Modifier Support**: Ctrl, Alt, Shift, Win key combinations
+
+#### HotkeyConfigDialog
+- **Script Selection**: Configure hotkeys for specific scripts
+- **Conflict Detection**: Prevents duplicate or system-reserved hotkeys
+- **Clear Functionality**: Remove existing hotkey assignments
+
+### 4. SettingsDialog (`gui/settings_dialog.py`)
+
+Enhanced settings interface supporting:
+- **Hotkey Configuration**: Tabbed interface for hotkey management
+- **Script Settings**: Configuration for script behavior
+- **Application Preferences**: Font settings, startup options, notifications
+- **Real-time Validation**: Immediate feedback on setting changes
 
 ## Script System
 
-### Script Lifecycle
+### Dual Script Architecture
+
+The application supports two types of scripts with different lifecycles:
+
+#### 1. Legacy UtilityScript Scripts
 
 1. **Discovery Phase**
    ```
    ScriptLoader.discover_scripts()
    ├── Scan scripts/ directory
    ├── Filter *.py files
-   └── Exclude __*.py files
+   ├── Exclude __*.py files
+   └── Try to import and find UtilityScript subclasses
    ```
 
-2. **Loading Phase**
+2. **Loading Phase** 
    ```
    ScriptLoader._load_script(path)
    ├── Import module
@@ -170,22 +261,34 @@ QThread subclass that:
    └── Call validate()
    ```
 
-3. **Widget Creation**
+3. **Execution Phase**
    ```
-   ScriptWidget.__init__(script)
-   ├── Get metadata
-   ├── Create UI elements
-   ├── Create button via ButtonFactory
-   └── Initial status update
+   User Interaction (Tray/Hotkey)
+   ├── TrayManager.execute_script()
+   ├── Call script.execute()
+   └── Show result notification
    ```
 
-4. **Execution Phase**
+#### 2. Standalone Scripts
+
+1. **Analysis Phase**
    ```
-   User Interaction
-   ├── ScriptWidget.on_action_triggered()
-   ├── Create ScriptExecutor thread
-   ├── Execute script.execute()
-   └── Handle result/error
+   ScriptAnalyzer.analyze_script(path)
+   ├── Parse Python AST
+   ├── Detect main function or __main__ block
+   ├── Extract argparse or function arguments
+   └── Determine execution strategy
+   ```
+
+2. **Execution Phase**
+   ```
+   User Interaction (Tray/Hotkey/CLI)
+   ├── ScriptExecutor.execute_script()
+   ├── Apply execution strategy:
+   │   ├── SUBPROCESS: Run with args
+   │   ├── FUNCTION_CALL: Import & call
+   │   └── MODULE_EXEC: Import & execute
+   └── Return ExecutionResult
    ```
 
 ### Script Implementation Example
@@ -226,26 +329,56 @@ class CustomScript(UtilityScript):
 
 ## Communication Flow
 
-### Status Update Flow
+### Script Menu Update Flow
 ```
-Every 5 seconds:
-MainWindow.refresh_timer → refresh_status()
-├── For each ScriptWidget:
-│   ├── widget.update_status()
-│   ├── script.get_status()
-│   └── Update UI elements
+Periodic Updates (5-second timer):
+TrayManager.refresh_scripts()
+├── ScriptLoader.discover_scripts()
+├── For each script:
+│   ├── Get current status
+│   └── Update tray menu text
+└── Refresh tray context menu
 ```
 
-### Action Execution Flow
+### Tray Menu Execution Flow
 ```
-User clicks button → ButtonWidget.callback()
-├── ScriptWidget.on_action_triggered()
-├── Validate script
-├── Create ScriptExecutor thread
-├── ScriptExecutor.run()
-│   └── script.execute(*args)
-├── Signal: finished(result) or error(msg)
-└── Update UI with result
+User clicks script in tray menu:
+TrayManager → Script execution
+├── Identify script type (Legacy/Standalone)
+├── Execute appropriate handler:
+│   ├── Legacy: script.execute()
+│   └── Standalone: ScriptExecutor.execute_script()
+├── Capture result
+├── Show notification with result
+└── Update script status in menu
+```
+
+### Global Hotkey Execution Flow
+```
+Windows hotkey pressed:
+Win32 WM_HOTKEY message → HotkeyWidget.nativeEvent()
+├── HotkeyWidget.hotkey_triggered(hotkey_id)
+├── HotkeyManager._on_hotkey_triggered(hotkey_id)
+├── Map hotkey_id to script_name
+├── HotkeyManager.hotkey_triggered.emit(script_name, hotkey_string)
+├── TrayManager.execute_script_by_name(script_name)
+├── Execute script (same as tray menu flow)
+└── Show notification with result
+```
+
+### Settings & Hotkey Configuration Flow
+```
+User configures hotkey:
+SettingsDialog → Hotkeys Tab
+├── User selects script and clicks hotkey cell
+├── HotkeyConfigDialog opens
+├── HotkeyRecorder captures key combination
+├── Validate hotkey (conflicts, system reserved)
+├── HotkeyRegistry.add_hotkey(script, hotkey)
+├── Save to QSettings (Windows Registry)
+├── MainWindow.hotkeys_changed signal
+├── TrayManager.refresh_hotkeys()
+└── HotkeyManager.register_hotkey() with Windows API
 ```
 
 ## Error Handling
@@ -306,34 +439,44 @@ HH:MM:SS | LEVEL    | MODULE.Class         | Message
 
 ## Performance Considerations
 
-1. **Threading**: Script execution in separate threads prevents UI blocking
-2. **Lazy Loading**: Scripts loaded on-demand during discovery
-3. **Status Caching**: 5-second refresh interval balances responsiveness and performance
-4. **Signal Debouncing**: Slider uses `is_updating` flag to prevent callback loops
-5. **Process Flags**: `CREATE_NO_WINDOW` prevents console popup on Windows
+1. **Tray-Only Architecture**: No main window UI reduces memory footprint and startup time
+2. **Single Instance**: Shared memory prevents multiple app instances and resource conflicts
+3. **AST Analysis Caching**: Script analysis results cached to avoid repeated parsing
+4. **Lazy Script Loading**: Scripts analyzed only when first accessed or during discovery
+5. **Efficient Hotkey Handling**: Native Windows API with minimal Qt widget overhead
+6. **Subprocess Optimization**: `CREATE_NO_WINDOW` flag prevents console popups
+7. **Status Update Batching**: Tray menu updates batched with 5-second timer
+8. **Font Setting Caching**: Font configurations cached and applied efficiently
 
 ## Security Considerations
 
-1. **Script Validation**: Each script must pass validate() before loading
-2. **Error Isolation**: Malicious/buggy scripts can't crash the application
-3. **No Automatic Execution**: Scripts only run on user interaction
-4. **Subprocess Safety**: Shell=False by default, CREATE_NO_WINDOW for stealth
-5. **Type Safety**: Strong typing prevents type confusion attacks
+1. **Script Isolation**: Both legacy and standalone scripts isolated from main application
+2. **AST Analysis Only**: Script analysis uses safe AST parsing, never executes code
+3. **Subprocess Safety**: All subprocess calls use `shell=False` and `CREATE_NO_WINDOW`
+4. **Hotkey Validation**: System-reserved hotkeys blocked to prevent security conflicts
+5. **Single Instance**: Prevents multiple instances and potential security holes
+6. **Settings Storage**: Hotkeys stored in user registry space (not system-wide)
+7. **No Network Access**: Core application has no network dependencies
+8. **Execution Timeouts**: Scripts have configurable timeout limits to prevent hanging
 
 ## Future Enhancements
 
 ### Planned Features
-- Script configuration persistence
-- Script scheduling/automation
-- Multi-script workflows
-- Undo/redo functionality
-- Script marketplace/sharing
-- Remote script execution
-- Script dependencies management
+- **Cross-Platform Hotkeys**: Linux and macOS hotkey support
+- **Script Scheduling**: Cron-like scheduling for automated script execution
+- **Script Chaining**: Multi-script workflows and dependencies
+- **Cloud Sync**: Hotkey and script configuration synchronization
+- **Script Store**: Built-in marketplace for sharing community scripts
+- **Advanced Analysis**: Enhanced AST analysis for better argument detection
+- **Performance Monitoring**: Script execution time tracking and optimization
+- **Script Templates**: Code generation templates for common script patterns
 
 ### Extension Points
-- Custom button types via ButtonFactory
-- Additional script metadata fields
-- Plugin system for script loaders
-- Theme customization
-- Internationalization support
+- **Hotkey Providers**: Pluggable hotkey backends for different platforms
+- **Execution Strategies**: Additional script execution methods (containers, sandboxes)
+- **Analysis Plugins**: Custom AST analyzers for specific script patterns
+- **Notification Backends**: Alternative notification systems (toast, desktop, email)
+- **Settings Backends**: Alternative storage systems (cloud, file-based)
+- **Theme System**: Complete UI customization and theming support
+- **Script Metadata**: Enhanced metadata fields and validation
+- **Internationalization**: Multi-language support throughout the application

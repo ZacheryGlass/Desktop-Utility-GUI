@@ -1,18 +1,20 @@
 # Tutorial: Creating Custom Utility Scripts
 
-This tutorial will guide you through creating custom utility scripts for the Desktop Utility GUI, from simple to advanced implementations.
+This tutorial covers creating scripts for the Desktop Utility GUI using both legacy UtilityScript classes and modern standalone scripts with global hotkey support.
 
 ## Table of Contents
 1. [Quick Start](#quick-start)
-2. [Understanding the Basics](#understanding-the-basics)
-3. [Step-by-Step Examples](#step-by-step-examples)
-4. [Advanced Techniques](#advanced-techniques)
-5. [Best Practices](#best-practices)
-6. [Troubleshooting](#troubleshooting)
+2. [Script Types Overview](#script-types-overview)
+3. [Legacy UtilityScript Examples](#legacy-utilityscript-examples)
+4. [Standalone Script Examples](#standalone-script-examples)
+5. [Global Hotkey Configuration](#global-hotkey-configuration)
+6. [Advanced Techniques](#advanced-techniques)
+7. [Best Practices](#best-practices)
+8. [Troubleshooting](#troubleshooting)
 
 ## Quick Start
 
-### Minimal Script Template
+### Legacy UtilityScript Template
 
 Create a new Python file in the `scripts/` directory:
 
@@ -42,9 +44,79 @@ class MyScript(UtilityScript):
         return True  # Available on all systems
 ```
 
-Save as `scripts/my_script.py` and restart the GUI - your script will appear automatically!
+### Standalone Script Template
 
-## Understanding the Basics
+Create a modern standalone script:
+
+```python
+#!/usr/bin/env python3
+"""
+Simple standalone script example.
+Can be executed via tray menu, hotkeys, or command line.
+"""
+import json
+import sys
+
+def main():
+    """Main function"""
+    result = {
+        'success': True,
+        'message': 'Standalone script executed successfully!'
+    }
+    
+    # Output JSON for the application to parse
+    print(json.dumps(result))
+    return 0 if result['success'] else 1
+
+if __name__ == '__main__':
+    sys.exit(main())
+```
+
+Save either template as `scripts/my_script.py` and it will appear in the system tray menu automatically!
+
+## Script Types Overview
+
+The application supports two types of scripts with different capabilities:
+
+### Legacy UtilityScript (Class-based)
+
+**Best for:** Complex UI interactions, stateful scripts, real-time status updates
+
+**Features:**
+- Rich button types (TOGGLE, CYCLE, SLIDER, etc.)
+- Real-time status display in tray menus
+- Built-in validation and error handling
+- Full PyQt6 integration
+
+**Execution:** Via tray menu or global hotkeys
+
+### Standalone Scripts (Function-based)
+
+**Best for:** Command-line tools, system utilities, simple automations
+
+**Features:**
+- AST-based analysis for automatic argument detection
+- Multiple execution strategies (subprocess, function call, module)
+- Command-line compatibility
+- JSON-based result communication
+- Support for argparse integration
+
+**Execution:** Via tray menu, global hotkeys, or direct command line
+
+### Comparison Table
+
+| Feature | Legacy UtilityScript | Standalone Scripts |
+|---------|--------------------|--------------------|
+| **Complexity** | Higher (class structure) | Lower (simple functions) |
+| **UI Types** | All button types | Basic execution |
+| **Status Updates** | Real-time via get_status() | Static display name |
+| **Arguments** | Via execute() parameters | Via argparse or function parameters |
+| **Command Line** | Not directly executable | Fully command-line compatible |
+| **Validation** | Built-in validate() method | Automatic compatibility checking |
+| **Global Hotkeys** | ✅ Supported | ✅ Supported |
+| **Error Handling** | Manual via return dict | Automatic via subprocess/exceptions |
+
+## Legacy UtilityScript Examples
 
 ### The Four Required Methods
 
@@ -870,118 +942,249 @@ if __name__ == "__main__":
     print("Result:", result)
 ```
 
-### Running Scripts Standalone
+## Standalone Script Examples
 
-All utility scripts can be executed directly from the command line without the GUI. This is useful for testing, debugging, or integrating with other automation tools.
+Standalone scripts are analyzed using Python's AST (Abstract Syntax Tree) and can be executed via multiple strategies.
 
-#### Standard Implementation
-
-Every script should include a `if __name__ == "__main__":` block for standalone execution:
+### Simple Standalone Script
 
 ```python
-if __name__ == "__main__":
-    import json
+#!/usr/bin/env python3
+"""Simple utility script with no arguments"""
+import json
+import subprocess
+import sys
+
+def main():
+    """Clear Windows temp files"""
+    try:
+        # Get temp directory
+        temp_dir = subprocess.run(['echo', '%TEMP%'], shell=True, capture_output=True, text=True)
+        temp_path = temp_dir.stdout.strip()
+        
+        # Count files (simulation)
+        result = {
+            'success': True,
+            'message': f'Cleaned temp files from {temp_path}',
+            'data': {'files_removed': 15}
+        }
+    except Exception as e:
+        result = {
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }
     
-    script = MyScript()
-    
-    # Display current status
-    current_status = script.get_status()
-    print(f"Current status: {current_status}")
-    
-    # Execute the script
-    result = script.execute()
-    
-    # Display result as JSON
-    print(json.dumps(result, indent=2))
-    
-    # Exit with appropriate code
-    sys.exit(0 if result.get('success', False) else 1)
+    # Always output JSON for the GUI to parse
+    print(json.dumps(result))
+    return 0 if result['success'] else 1
+
+if __name__ == '__main__':
+    sys.exit(main())
 ```
 
-#### Examples by Button Type
+### Argparse-Based Script
 
-**RUN Button Scripts:**
 ```python
-if __name__ == "__main__":
-    import json
+#!/usr/bin/env python3
+"""Volume control script with command line arguments"""
+import argparse
+import json
+import sys
+
+def set_volume(level):
+    """Set system volume level"""
+    # Simulated volume setting
+    return {
+        'success': True,
+        'message': f'Volume set to {level}%'
+    }
+
+def get_volume():
+    """Get current volume level"""
+    # Simulated volume getting
+    return 75
+
+def main():
+    parser = argparse.ArgumentParser(description='Control system volume')
+    parser.add_argument('--level', type=int, choices=range(0, 101), metavar='0-100',
+                       help='Set volume level (0-100)')
+    parser.add_argument('--mute', action='store_true',
+                       help='Mute audio')
+    parser.add_argument('--unmute', action='store_true', 
+                       help='Unmute audio')
+    parser.add_argument('--status', action='store_true',
+                       help='Show current volume level')
     
-    script = BluetoothToggle()
-    print(f"Status: {script.get_status()}")
-    print("Executing...")
-    result = script.execute()
-    print(json.dumps(result, indent=2))
-    sys.exit(0 if result.get('success', False) else 1)
+    args = parser.parse_args()
+    
+    try:
+        if args.status:
+            volume = get_volume()
+            result = {
+                'success': True,
+                'message': f'Current volume: {volume}%',
+                'data': {'volume': volume}
+            }
+        elif args.level is not None:
+            result = set_volume(args.level)
+        elif args.mute:
+            result = {
+                'success': True,
+                'message': 'Audio muted'
+            }
+        elif args.unmute:
+            result = {
+                'success': True,
+                'message': 'Audio unmuted'
+            }
+        else:
+            # Default action
+            result = {
+                'success': True,
+                'message': 'Use --help for available options'
+            }
+    except Exception as e:
+        result = {
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }
+    
+    print(json.dumps(result))
+    return 0 if result['success'] else 1
+
+if __name__ == '__main__':
+    sys.exit(main())
 ```
 
-**TOGGLE Button Scripts:**
-```python
-if __name__ == "__main__":
-    import json
-    
-    script = DisplayToggle()
-    current = script.get_status()
-    print(f"Current mode: {current}")
-    print("Toggling...")
-    result = script.execute()
-    print(json.dumps(result, indent=2))
-    sys.exit(0 if result.get('success', False) else 1)
-```
+### Function-Based Script (No Args)
 
-**CYCLE Button Scripts:**
 ```python
-if __name__ == "__main__":
-    import json
+#!/usr/bin/env python3
+"""Script with main function - called directly by ScriptExecutor"""
+import json
+
+def restart_service():
+    """Restart a Windows service"""
+    # Simulated service restart
+    return {
+        'success': True,
+        'message': 'Service restarted successfully'
+    }
+
+def main():
+    """Main function called by ScriptExecutor with FUNCTION_CALL strategy"""
+    result = restart_service()
     
-    script = PowerPlanToggle()
-    
-    # With command line argument
-    if len(sys.argv) > 1:
-        plan_name = sys.argv[1]
-        result = script.execute(plan_name)
+    # For FUNCTION_CALL strategy, we can return the dict directly
+    # or print JSON - both work
+    if __name__ == '__main__':
+        print(json.dumps(result))
+        return 0 if result['success'] else 1
     else:
-        # Auto-cycle to next option
-        current = script.get_status()
-        print(f"Current: {current}")
-        metadata = script.get_metadata()
-        options = metadata['button_options'].options
-        next_index = (options.index(current) + 1) % len(options)
-        next_option = options[next_index]
-        print(f"Switching to: {next_option}")
-        result = script.execute(next_option)
-    
-    print(json.dumps(result, indent=2))
-    sys.exit(0 if result.get('success', False) else 1)
+        return result
+
+if __name__ == '__main__':
+    import sys
+    sys.exit(main())
 ```
 
-#### Command Line Usage
+### Script Execution Strategies
 
-Run scripts directly from the command line:
+The ScriptAnalyzer determines the best execution strategy:
+
+1. **SUBPROCESS Strategy** - Used when:
+   - Script has argparse arguments
+   - Script has `if __name__ == "__main__":` block
+   - Best for: Command-line tools, external integrations
+
+2. **FUNCTION_CALL Strategy** - Used when:
+   - Script has a `main()` function
+   - No arguments or simple function parameters
+   - Best for: Direct Python function calls, faster execution
+
+3. **MODULE_EXEC Strategy** - Used when:
+   - Script has no main function
+   - Script has executable code at module level
+   - Best for: Simple scripts, imports
+
+### Command Line Compatibility
+
+All standalone scripts can be executed directly:
 
 ```bash
-# Run a script from the scripts directory
-cd scripts
-python display_toggle.py
+# Execute script directly
+python scripts/volume_control.py --level 50
 
-# Run from project root
-python scripts/power_plan.py
+# With status check
+python scripts/volume_control.py --status
 
-# Pass arguments for cycle scripts
-python scripts/power_plan.py "High performance"
-
-# Use in shell scripts or automation
-if python scripts/bluetooth_reset.py; then
-    echo "Bluetooth reset successful"
-else
-    echo "Bluetooth reset failed"
+# In automation scripts
+if python scripts/service_restart.py; then
+    echo "Service restart successful"
 fi
+
+# From project root
+python scripts/temp_cleaner.py
 ```
 
-This standalone capability allows scripts to be:
-- Tested independently during development
-- Integrated into batch files or shell scripts
-- Called from task schedulers
-- Used in automation workflows
-- Debugged more easily
+## Global Hotkey Configuration
+
+Scripts can be assigned global hotkey combinations for instant access.
+
+### Setting Up Hotkeys
+
+1. **Access Settings:**
+   - Right-click the system tray icon
+   - Select "Settings..."
+   - Click the "Hotkeys" tab
+
+2. **Assign a Hotkey:**
+   - Find your script in the table
+   - Click the empty hotkey cell (shows "(empty)")
+   - Press your desired key combination (e.g., Ctrl+Alt+X)
+   - Click "OK" to confirm
+
+3. **Supported Combinations:**
+   - **Modifiers:** Ctrl, Alt, Shift, Win (at least one required)
+   - **Keys:** Letters (A-Z), Numbers (0-9), Function keys (F1-F12)
+   - **Special Keys:** Space, Enter, Arrow keys, etc.
+
+### Hotkey Examples
+
+```
+Ctrl+Alt+V     - Volume Control
+Ctrl+Shift+T   - Temp File Cleaner  
+Win+Alt+D      - Display Toggle
+Ctrl+Alt+F1    - Service Restart
+```
+
+### Reserved Combinations
+
+These hotkey combinations are blocked for security:
+- System clipboard: Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+A
+- File operations: Ctrl+S, Ctrl+O, Ctrl+N, Ctrl+P  
+- Window management: Alt+Tab, Alt+F4
+- Windows shortcuts: Win+L, Win+D, Win+E, Win+R
+- System functions: Ctrl+Alt+Delete, Ctrl+Shift+Escape
+
+### Hotkey Testing
+
+Use the built-in "Test Hotkey" script to verify hotkey functionality:
+1. Assign a hotkey to the "Test Hotkey" script
+2. Press the hotkey combination from anywhere in Windows
+3. Check your Desktop for `hotkey_test_executed.txt` file
+
+### Troubleshooting Hotkeys
+
+**Hotkey not working:**
+- Ensure another application isn't using the same combination
+- Try a more unique combination (e.g., Ctrl+Shift+Alt+X)
+- Check that the application is running in the system tray
+
+**Registration failed:**
+- The hotkey may be reserved by another application
+- Try a different combination
+- Check the notification area for error messages
 
 ## Next Steps
 
