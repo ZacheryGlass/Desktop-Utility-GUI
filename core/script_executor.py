@@ -21,8 +21,9 @@ class ExecutionResult:
     data: Optional[Dict[str, Any]] = None
 
 class ScriptExecutor:
-    def __init__(self):
+    def __init__(self, settings=None):
         self.loaded_modules = {}
+        self.settings = settings
     
     def execute_script(self, script_info: ScriptInfo, arguments: Optional[Dict[str, Any]] = None) -> ExecutionResult:
         """Execute a script using the appropriate strategy."""
@@ -80,7 +81,7 @@ class ScriptExecutor:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=self.settings.get_script_timeout_seconds() if self.settings else 30,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             )
             

@@ -1,5 +1,182 @@
 # API Reference
 
+## Global Hotkey System
+
+### HotkeyManager
+
+Manages Windows API integration for global hotkey registration.
+
+```python
+from core.hotkey_manager import HotkeyManager
+```
+
+#### Signals
+- `hotkey_triggered(str, str)`: Emitted when hotkey is pressed (script_name, hotkey_string)
+- `registration_failed(str, str)`: Emitted when registration fails (hotkey_string, error_message)
+
+#### Methods
+
+##### `register_hotkey(script_name: str, hotkey_string: str) -> bool`
+Register a global hotkey for a script.
+
+**Parameters:**
+- `script_name`: Name of the script to associate with hotkey
+- `hotkey_string`: Hotkey combination (e.g., "Ctrl+Alt+X")
+
+**Returns:**
+- `True` if registration succeeded, `False` otherwise
+
+**Example:**
+```python
+hotkey_manager = HotkeyManager()
+hotkey_manager.start()
+success = hotkey_manager.register_hotkey("My Script", "Ctrl+Alt+X")
+```
+
+##### `unregister_hotkey(script_name: str) -> bool`
+Unregister a hotkey for a script.
+
+##### `validate_hotkey_string(hotkey_string: str) -> Tuple[bool, str]`
+Validate a hotkey string for format and conflicts.
+
+**Returns:**
+- Tuple of (is_valid, error_message)
+
+### HotkeyRegistry
+
+Manages persistent storage of hotkey mappings.
+
+```python
+from core.hotkey_registry import HotkeyRegistry
+```
+
+#### Signals
+- `hotkey_added(str, str)`: Emitted when hotkey is added (script_name, hotkey_string)
+- `hotkey_removed(str)`: Emitted when hotkey is removed (script_name)
+- `hotkey_updated(str, str, str)`: Emitted when hotkey changes (script_name, old_hotkey, new_hotkey)
+
+#### Methods
+
+##### `add_hotkey(script_name: str, hotkey_string: str) -> Tuple[bool, str]`
+Add or update a hotkey mapping.
+
+**Returns:**
+- Tuple of (success, error_message)
+
+##### `remove_hotkey(script_name: str) -> bool`
+Remove a hotkey mapping for a script.
+
+##### `get_all_mappings() -> Dict[str, str]`
+Get all hotkey mappings as script_name -> hotkey_string dictionary.
+
+## Script Analysis & Execution System
+
+### ScriptAnalyzer
+
+Analyzes Python scripts to determine execution strategies.
+
+```python
+from core.script_analyzer import ScriptAnalyzer, ScriptInfo
+```
+
+#### Methods
+
+##### `analyze_script(script_path: Path) -> ScriptInfo`
+Analyze a Python script and return execution information.
+
+**Returns:**
+- `ScriptInfo` object containing analysis results
+
+**Example:**
+```python
+analyzer = ScriptAnalyzer()
+script_info = analyzer.analyze_script(Path("my_script.py"))
+print(f"Execution strategy: {script_info.execution_strategy}")
+print(f"Arguments: {[arg.name for arg in script_info.arguments]}")
+```
+
+### ScriptExecutor
+
+Executes scripts using multiple strategies.
+
+```python
+from core.script_executor import ScriptExecutor, ExecutionResult
+```
+
+#### Methods
+
+##### `execute_script(script_info: ScriptInfo, arguments: Optional[Dict[str, Any]] = None) -> ExecutionResult`
+Execute a script using the appropriate strategy.
+
+**Parameters:**
+- `script_info`: ScriptInfo object from ScriptAnalyzer
+- `arguments`: Dictionary of arguments to pass to script
+
+**Returns:**
+- `ExecutionResult` with success, message, output, error, and data
+
+**Example:**
+```python
+executor = ScriptExecutor()
+result = executor.execute_script(script_info, {"arg1": "value1"})
+if result.success:
+    print(f"Success: {result.message}")
+else:
+    print(f"Error: {result.error}")
+```
+
+##### `validate_arguments(script_info: ScriptInfo, arguments: Dict[str, Any]) -> List[str]`
+Validate arguments against script requirements.
+
+**Returns:**
+- List of validation error messages (empty if valid)
+
+### Data Classes
+
+#### ScriptInfo
+Information about an analyzed script.
+
+```python
+@dataclass
+class ScriptInfo:
+    file_path: Path
+    display_name: str
+    execution_strategy: ExecutionStrategy
+    main_function: Optional[str] = None
+    arguments: List[ArgumentInfo] = None
+    has_main_block: bool = False
+    is_executable: bool = False
+    error: Optional[str] = None
+```
+
+#### ExecutionResult
+Result of script execution.
+
+```python
+@dataclass
+class ExecutionResult:
+    success: bool
+    message: str = ""
+    output: str = ""
+    error: str = ""
+    return_code: Optional[int] = None
+    data: Optional[Dict[str, Any]] = None
+```
+
+#### ArgumentInfo
+Information about a script argument.
+
+```python
+@dataclass
+class ArgumentInfo:
+    name: str
+    required: bool = False
+    default: Any = None
+    help: str = ""
+    type: str = "str"
+    choices: Optional[List[str]] = None
+```
+
 ## Core Module
 
 ### UtilityScript
@@ -244,80 +421,117 @@ from core.exceptions import (
 
 ## GUI Module
 
+### TrayManager
+
+Primary system tray interface.
+
+```python
+from gui.tray_manager import TrayManager
+
+tray_manager = TrayManager(parent_window)
+```
+
+#### Signals
+- `settings_requested`: Emitted when user requests settings
+- `exit_requested`: Emitted when user requests application exit
+
+#### Methods
+
+##### `set_script_loader(script_loader: ScriptLoader)`
+Set the script loader for dynamic script discovery.
+
+##### `refresh_scripts()`
+Update the tray menu with current scripts and their status.
+
+##### `refresh_hotkeys()`
+Update hotkey registrations based on current settings.
+
+##### `execute_script_by_name(script_name: str)`
+Execute a script by name (typically called from hotkey).
+
+##### `show_notification(title: str, message: str)`
+Display a system tray notification.
+
+**Example:**
+```python
+tray_manager = TrayManager(main_window)
+tray_manager.set_script_loader(script_loader)
+tray_manager.show_notification("Success", "Script executed successfully")
+```
+
 ### MainWindow
 
-Main application window.
+Minimal main window for settings and dialogs.
 
 ```python
 from gui.main_window import MainWindow
 
-window = MainWindow(scripts_directory="scripts")
+window = MainWindow()
 ```
 
 #### Signals
 - `scripts_reloaded`: Emitted when scripts are reloaded
+- `settings_changed`: Emitted when application settings change
+- `hotkeys_changed`: Emitted when hotkey mappings change
 
 #### Methods
+
+##### `open_settings()`
+Open the settings dialog.
 
 ##### `load_scripts()`
-Loads all scripts and creates widgets.
+Load all scripts from the scripts directory.
 
-##### `reload_scripts()`
-Reloads all scripts from disk.
+### HotkeyConfigurator
 
-##### `refresh_status()`
-Updates status for all script widgets.
-
-### ScriptWidget
-
-Widget for individual script display and control.
+GUI components for hotkey configuration.
 
 ```python
-from gui.script_widget import ScriptWidget
-
-widget = ScriptWidget(script_instance)
+from gui.hotkey_configurator import HotkeyRecorder, HotkeyConfigDialog
 ```
 
-#### Signals
-- `script_executed(str, dict)`: Emitted after execution with name and result
+#### HotkeyRecorder
 
-#### Methods
+Custom QLineEdit for recording key combinations.
 
-##### `update_status()`
-Updates the status display.
+**Signals:**
+- `hotkey_changed(str)`: Emitted when hotkey combination changes
 
-##### `on_action_triggered(*args, **kwargs)`
-Handles user interaction with the control.
+**Methods:**
+- `start_recording()`: Begin capturing key combinations
+- `stop_recording()`: End key combination capture
+- `get_hotkey() -> str`: Get current hotkey string
+- `set_hotkey(hotkey_string: str)`: Set displayed hotkey
 
-### ButtonFactory
+#### HotkeyConfigDialog
 
-Factory for creating UI controls.
+Dialog for configuring hotkeys for scripts.
 
 ```python
-from gui.button_factory import ButtonFactory
-
-factory = ButtonFactory()
-widget = factory.create_button(
-    button_type=ButtonType.TOGGLE,
-    options=ToggleOptions(),
-    callback=my_callback
-)
+dialog = HotkeyConfigDialog("Script Name", current_hotkey="Ctrl+Alt+X")
+if dialog.exec() == QDialog.DialogCode.Accepted:
+    new_hotkey = dialog.get_hotkey()
 ```
 
-#### Methods
+### SettingsDialog
 
-##### `create_button(button_type, options, callback) -> QWidget`
-Creates appropriate Qt widget for button type.
+Enhanced settings dialog with hotkey support.
 
-**Parameters:**
-- `button_type`: ButtonType enum value
-- `options`: Corresponding options object
-- `callback`: Function to call on interaction
+```python
+from gui.settings_dialog import SettingsDialog
 
-**Returns:**
-- Configured Qt widget
+dialog = SettingsDialog(parent)
+```
 
-## Complete Script Example
+The settings dialog includes tabbed interface for:
+- General application settings
+- Script configuration 
+- Hotkey management with real-time validation
+- Font and appearance settings
+
+## Complete Script Examples
+
+### Legacy UtilityScript Example
 
 ```python
 import sys
@@ -408,6 +622,124 @@ class BrightnessControl(UtilityScript):
             return result.returncode == 0
         except Exception:
             return False
+```
+
+### Standalone Script Example
+
+```python
+#!/usr/bin/env python3
+"""
+Standalone script for network interface control.
+Can be executed via tray menu, hotkeys, or command line.
+"""
+import argparse
+import subprocess
+import sys
+import json
+
+def get_network_status():
+    """Get current network interface status"""
+    try:
+        result = subprocess.run(
+            ['netsh', 'interface', 'show', 'interface'],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        )
+        return 'connected' in result.stdout.lower()
+    except Exception:
+        return False
+
+def toggle_network(enable: bool):
+    """Enable or disable network interface"""
+    try:
+        action = 'enable' if enable else 'disable'
+        result = subprocess.run(
+            ['netsh', 'interface', 'set', 'interface', 'Ethernet', action],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        )
+        
+        if result.returncode == 0:
+            return {
+                'success': True,
+                'message': f'Network {"enabled" if enable else "disabled"}'
+            }
+        else:
+            return {
+                'success': False,
+                'message': f'Failed to {action} network: {result.stderr}'
+            }
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }
+
+def main():
+    """Main function - can be called by ScriptExecutor"""
+    parser = argparse.ArgumentParser(description='Control network interface')
+    parser.add_argument('--enable', action='store_true', 
+                       help='Enable network interface')
+    parser.add_argument('--disable', action='store_true',
+                       help='Disable network interface')
+    parser.add_argument('--status', action='store_true',
+                       help='Show current status')
+    
+    args = parser.parse_args()
+    
+    if args.status:
+        status = get_network_status()
+        result = {
+            'success': True,
+            'message': f'Network is {"connected" if status else "disconnected"}',
+            'data': {'connected': status}
+        }
+    elif args.enable:
+        result = toggle_network(True)
+    elif args.disable:
+        result = toggle_network(False)
+    else:
+        # Default action - toggle
+        current_status = get_network_status()
+        result = toggle_network(not current_status)
+    
+    # Output JSON for ScriptExecutor to parse
+    print(json.dumps(result))
+    return 0 if result['success'] else 1
+
+if __name__ == '__main__':
+    sys.exit(main())
+```
+
+### Using the Analysis & Execution System
+
+```python
+from pathlib import Path
+from core.script_analyzer import ScriptAnalyzer
+from core.script_executor import ScriptExecutor
+
+# Analyze a standalone script
+analyzer = ScriptAnalyzer()
+script_info = analyzer.analyze_script(Path('network_control.py'))
+
+print(f"Script: {script_info.display_name}")
+print(f"Strategy: {script_info.execution_strategy}")
+print(f"Arguments: {[arg.name for arg in script_info.arguments]}")
+
+# Execute the script
+executor = ScriptExecutor()
+result = executor.execute_script(script_info, {'enable': True})
+
+if result.success:
+    print(f"Success: {result.message}")
+    if result.data:
+        print(f"Data: {result.data}")
+else:
+    print(f"Error: {result.error}")
 ```
 
 ## Logging

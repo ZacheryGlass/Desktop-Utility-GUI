@@ -2,9 +2,8 @@ import sys
 import os
 import logging
 import argparse
-from datetime import datetime
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox
-from PyQt6.QtCore import Qt, QSharedMemory, QSystemSemaphore
+from PyQt6.QtCore import Qt, QSharedMemory
 from PyQt6.QtGui import QFont
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -84,7 +83,6 @@ def main():
     
     logger.info("="*60)
     logger.info("DESKTOP UTILITY GUI STARTING")
-    logger.info(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Python version: {sys.version}")
     logger.info(f"Working directory: {os.getcwd()}")
     logger.info(f"Command line args: {sys.argv}")

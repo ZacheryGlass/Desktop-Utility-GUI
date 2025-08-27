@@ -20,7 +20,7 @@ class ScriptLoader:
         self.failed_scripts: Dict[str, str] = {}
         self.settings = SettingsManager()
         self.analyzer = ScriptAnalyzer()
-        self.executor = ScriptExecutor()
+        self.executor = ScriptExecutor(self.settings)
         logger.info(f"ScriptLoader initialized with directory: {self.scripts_directory.absolute()}")
     
     def discover_scripts(self) -> List[ScriptInfo]:

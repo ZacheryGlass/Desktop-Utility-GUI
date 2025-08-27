@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (QSystemTrayIcon, QMenu, QApplication, 
-                             QMessageBox, QWidget, QInputDialog)
+                             QMessageBox, QWidget)
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt, QRect
 from PyQt6.QtGui import QIcon, QAction, QPixmap, QPainter, QBrush, QPen, QScreen, QCursor
 
@@ -59,7 +59,8 @@ class TrayManager(QObject):
         # Setup refresh timer for script status
         self.refresh_timer = QTimer()
         self.refresh_timer.timeout.connect(self._update_script_statuses)
-        self.refresh_timer.start(5000)  # Update every 5 seconds
+        refresh_interval = self.settings.get_status_refresh_seconds() * 1000  # Convert to milliseconds
+        self.refresh_timer.start(refresh_interval)
         
         # Start hotkey manager
         self.hotkey_manager.start()
@@ -342,7 +343,8 @@ class TrayManager(QObject):
             current_args = self.script_loader.get_script_arguments(script_info.file_path.stem)
             
             # For now, execute with current settings
-            # TODO: Add dialog for argument configuration
+            # TODO: Implement argument configuration dialog for scripts that need user input
+            #       This should show before execution if script has configurable arguments
             logger.info(f"Executing script {script_info.display_name} with current arguments")
             
             result = self.script_loader.execute_script(script_info.file_path.stem, current_args)
