@@ -12,6 +12,7 @@ from core.startup_manager import StartupManager
 from core.script_loader import ScriptLoader
 from core.hotkey_registry import HotkeyRegistry
 from gui.hotkey_configurator import HotkeyConfigDialog
+from gui.preset_editor import PresetEditorDialog
 
 # UI Theme Constants
 CUSTOM_NAME_COLOR = Qt.GlobalColor.cyan
@@ -49,6 +50,10 @@ class SettingsDialog(QDialog):
         # Create and add Scripts tab
         self.scripts_tab = self._create_scripts_tab()
         self.tab_widget.addTab(self.scripts_tab, "Scripts")
+        
+        # Create and add Presets tab
+        self.presets_tab = self._create_presets_tab()
+        self.tab_widget.addTab(self.presets_tab, "Presets")
         
         # Dialog buttons
         button_box = QDialogButtonBox(
@@ -206,6 +211,88 @@ class SettingsDialog(QDialog):
         # Load scripts table
         self._refresh_scripts_table()
 
+        return widget
+    
+    def _create_presets_tab(self) -> QWidget:
+        """Create the Script Presets configuration tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Instructions
+        instructions = QLabel(
+            "Manage preset configurations for scripts that require arguments. "
+            "Create multiple presets with different argument values for easy execution."
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        
+        # Script selection
+        script_selection_layout = QHBoxLayout()
+        script_selection_layout.addWidget(QLabel("Script:"))
+        
+        self.presets_script_combo = QComboBox()
+        self.presets_script_combo.currentTextChanged.connect(self._on_preset_script_changed)
+        script_selection_layout.addWidget(self.presets_script_combo)
+        
+        script_selection_layout.addStretch()
+        layout.addLayout(script_selection_layout)
+        
+        # Presets table
+        self.presets_table = QTableWidget()
+        self.presets_table.setColumnCount(2)
+        self.presets_table.setHorizontalHeaderLabels(["Preset Name", "Arguments"])
+        
+        # Set table styling
+        self.presets_table.setStyleSheet("""
+            QTableWidget {
+                background-color: #2b2b2b;
+                alternate-background-color: #3c3c3c;
+                gridline-color: #555555;
+                color: #ffffff;
+            }
+            QTableWidget::item {
+                padding: 4px;
+                color: #ffffff;
+            }
+            QTableWidget::item:selected {
+                background-color: #0078d4;
+            }
+            QHeaderView::section {
+                background-color: #404040;
+                color: #ffffff;
+                padding: 4px;
+                border: 1px solid #555555;
+            }
+        """)
+        
+        # Configure table
+        self.presets_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.presets_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.presets_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        
+        layout.addWidget(self.presets_table)
+        
+        # Buttons
+        preset_buttons_layout = QHBoxLayout()
+        
+        add_preset_button = QPushButton("Add Preset")
+        add_preset_button.clicked.connect(self._add_preset)
+        preset_buttons_layout.addWidget(add_preset_button)
+        
+        edit_preset_button = QPushButton("Edit Preset")
+        edit_preset_button.clicked.connect(self._edit_preset)
+        preset_buttons_layout.addWidget(edit_preset_button)
+        
+        delete_preset_button = QPushButton("Delete Preset")
+        delete_preset_button.clicked.connect(self._delete_preset)
+        preset_buttons_layout.addWidget(delete_preset_button)
+        
+        preset_buttons_layout.addStretch()
+        layout.addLayout(preset_buttons_layout)
+        
+        # Load initial data
+        self._refresh_presets_script_combo()
+        
         return widget
 
     def load_settings(self):
@@ -417,3 +504,138 @@ class SettingsDialog(QDialog):
                     hotkey_item.setForeground(Qt.GlobalColor.white if new_hotkey else Qt.GlobalColor.gray)
                 
                 self.hotkeys_changed.emit()
+    
+    # Preset management methods
+    def _refresh_presets_script_combo(self):
+        """Refresh the script combo box with scripts that have arguments"""
+        self.presets_script_combo.clear()
+        
+        if not self.script_loader:
+            return
+        
+        scripts = self.script_loader.discover_scripts()
+        
+        for script_info in scripts:
+            if script_info.arguments:  # Only scripts with arguments
+                display_name = script_info.display_name
+                self.presets_script_combo.addItem(display_name, script_info)
+        
+        # Load presets for first script
+        if self.presets_script_combo.count() > 0:
+            self._on_preset_script_changed(self.presets_script_combo.currentText())
+    
+    def _on_preset_script_changed(self, script_display_name: str):
+        """Handle script selection change in presets tab"""
+        self.presets_table.setRowCount(0)
+        
+        # Get selected script info
+        current_index = self.presets_script_combo.currentIndex()
+        if current_index < 0:
+            return
+        
+        script_info = self.presets_script_combo.itemData(current_index)
+        if not script_info:
+            return
+        
+        script_name = script_info.file_path.stem
+        presets = self.settings.get_script_presets(script_name)
+        
+        # Populate presets table
+        for preset_name, arguments in presets.items():
+            row_position = self.presets_table.rowCount()
+            self.presets_table.insertRow(row_position)
+            
+            # Preset name
+            name_item = QTableWidgetItem(preset_name)
+            name_item.setData(Qt.ItemDataRole.UserRole, script_info)
+            self.presets_table.setItem(row_position, 0, name_item)
+            
+            # Arguments summary
+            args_text = ", ".join([f"{k}={v}" for k, v in arguments.items()])
+            args_item = QTableWidgetItem(args_text)
+            self.presets_table.setItem(row_position, 1, args_item)
+    
+    def _add_preset(self):
+        """Add a new preset for the selected script"""
+        current_index = self.presets_script_combo.currentIndex()
+        if current_index < 0:
+            QMessageBox.information(self, "No Script Selected", "Please select a script first.")
+            return
+        
+        script_info = self.presets_script_combo.itemData(current_index)
+        if not script_info:
+            return
+        
+        # Open preset editor dialog
+        self._open_preset_editor(script_info, None)
+    
+    def _edit_preset(self):
+        """Edit the selected preset"""
+        selected_rows = self.presets_table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.information(self, "No Preset Selected", "Please select a preset to edit.")
+            return
+        
+        row = selected_rows[0].row()
+        preset_name_item = self.presets_table.item(row, 0)
+        if not preset_name_item:
+            return
+        
+        script_info = preset_name_item.data(Qt.ItemDataRole.UserRole)
+        preset_name = preset_name_item.text()
+        
+        # Open preset editor dialog
+        self._open_preset_editor(script_info, preset_name)
+    
+    def _delete_preset(self):
+        """Delete the selected preset"""
+        selected_rows = self.presets_table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.information(self, "No Preset Selected", "Please select a preset to delete.")
+            return
+        
+        row = selected_rows[0].row()
+        preset_name_item = self.presets_table.item(row, 0)
+        if not preset_name_item:
+            return
+        
+        script_info = preset_name_item.data(Qt.ItemDataRole.UserRole)
+        preset_name = preset_name_item.text()
+        script_name = script_info.file_path.stem
+        
+        # Confirm deletion
+        reply = QMessageBox.question(
+            self, "Delete Preset",
+            f"Are you sure you want to delete the preset '{preset_name}' for script '{script_info.display_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.settings.delete_script_preset(script_name, preset_name)
+            self._on_preset_script_changed(self.presets_script_combo.currentText())
+    
+    def _open_preset_editor(self, script_info, preset_name=None):
+        """Open the preset editor dialog"""
+        script_name = script_info.file_path.stem
+        
+        # Get current arguments if editing
+        current_args = {}
+        if preset_name:
+            current_args = self.settings.get_preset_arguments(script_name, preset_name)
+        
+        # Create and show the preset editor dialog
+        editor = PresetEditorDialog(script_info, preset_name, current_args, self)
+        
+        if editor.exec() == QDialog.DialogCode.Accepted:
+            # Get the results from the dialog
+            new_preset_name = editor.get_preset_name()
+            arguments = editor.get_arguments()
+            
+            if new_preset_name and arguments:
+                # If preset name changed, delete the old one
+                if preset_name and preset_name != new_preset_name:
+                    self.settings.delete_script_preset(script_name, preset_name)
+                
+                # Save the new/updated preset
+                self.settings.save_script_preset(script_name, new_preset_name, arguments)
+                self._on_preset_script_changed(self.presets_script_combo.currentText())

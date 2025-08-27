@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Any, Optional, Dict
+from typing import Any, Optional, Dict, List
 from PyQt6.QtCore import QSettings, QObject, pyqtSignal
 
 logger = logging.getLogger('Core.Settings')
@@ -42,6 +42,11 @@ class SettingsManager(QObject):
         },
         'script_arguments': {
             # Script arguments will be stored as 'script_arguments/ScriptName/ArgName': 'value'
+            # This is just a placeholder for the schema
+        },
+        'script_presets': {
+            # Script presets will be stored as 'script_presets/ScriptName/PresetName/ArgName': 'value'
+            # Example: 'script_presets/audio_toggle/Headphones/device': 'headphones'
             # This is just a placeholder for the schema
         }
     }
@@ -312,3 +317,90 @@ class SettingsManager(QObject):
     def set_status_refresh_seconds(self, seconds: int) -> None:
         """Set the status refresh interval in seconds."""
         self.set('execution/status_refresh_seconds', seconds)
+    
+    # Script preset methods
+    def get_script_presets(self, script_name: str) -> Dict[str, Dict[str, Any]]:
+        """Get all presets for a script as {preset_name: {arg_name: value}}."""
+        result = {}
+        self.settings.beginGroup(f'script_presets/{script_name}')
+        try:
+            for preset_name in self.settings.childGroups():
+                preset_args = {}
+                self.settings.beginGroup(preset_name)
+                try:
+                    for arg_name in self.settings.allKeys():
+                        value = self.settings.value(arg_name)
+                        # Convert string representations back to proper types
+                        if isinstance(value, str):
+                            if value.lower() == 'true':
+                                value = True
+                            elif value.lower() == 'false':
+                                value = False
+                            else:
+                                try:
+                                    if '.' in value:
+                                        value = float(value)
+                                    else:
+                                        value = int(value)
+                                except ValueError:
+                                    pass  # Keep as string
+                        preset_args[arg_name] = value
+                finally:
+                    self.settings.endGroup()
+                result[preset_name] = preset_args
+        finally:
+            self.settings.endGroup()
+        return result
+    
+    def save_script_preset(self, script_name: str, preset_name: str, arguments: Dict[str, Any]) -> None:
+        """Save a preset configuration for a script."""
+        # Remove existing preset
+        self.delete_script_preset(script_name, preset_name)
+        
+        # Save new preset
+        for arg_name, value in arguments.items():
+            key = f'script_presets/{script_name}/{preset_name}/{arg_name}'
+            self.set(key, value)
+        
+        logger.info(f"Saved preset '{preset_name}' for script '{script_name}' with {len(arguments)} arguments")
+    
+    def delete_script_preset(self, script_name: str, preset_name: str) -> None:
+        """Delete a preset configuration for a script."""
+        preset_key = f'script_presets/{script_name}/{preset_name}'
+        self.settings.beginGroup(preset_key)
+        try:
+            self.settings.remove('')  # Remove all keys in this group
+            self.settings.sync()
+            logger.debug(f"Deleted preset '{preset_name}' for script '{script_name}'")
+        finally:
+            self.settings.endGroup()
+    
+    def get_script_preset_names(self, script_name: str) -> List[str]:
+        """Get list of preset names for a script."""
+        preset_names = []
+        self.settings.beginGroup(f'script_presets/{script_name}')
+        try:
+            preset_names = list(self.settings.childGroups())
+        finally:
+            self.settings.endGroup()
+        return preset_names
+    
+    def has_script_presets(self, script_name: str) -> bool:
+        """Check if a script has any configured presets."""
+        return len(self.get_script_preset_names(script_name)) > 0
+    
+    def get_all_scripts_with_presets(self) -> Dict[str, List[str]]:
+        """Get all scripts that have presets as {script_name: [preset_names]}."""
+        result = {}
+        self.settings.beginGroup('script_presets')
+        try:
+            for script_name in self.settings.childGroups():
+                result[script_name] = self.get_script_preset_names(script_name)
+        finally:
+            self.settings.endGroup()
+        return result
+    
+    def get_preset_arguments(self, script_name: str, preset_name: str) -> Dict[str, Any]:
+        """Get arguments for a specific preset."""
+        presets = self.get_script_presets(script_name)
+        return presets.get(preset_name, {})

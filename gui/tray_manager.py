@@ -205,10 +205,17 @@ class TrayManager(QObject):
                     display_name = self.script_loader.get_script_display_name(script_info)
                     self.script_name_to_info[display_name] = script_info
                     
-                    # Determine if script needs arguments
-                    if script_info.arguments:
-                        # Script requires arguments - create submenu or input dialog
-                        action = self._create_script_action_with_arguments(script_info, display_name)
+                    # Check if script needs configuration or has presets
+                    script_name = script_info.file_path.stem
+                    has_presets = self.settings.has_script_presets(script_name)
+                    needs_config = script_info.needs_configuration and not has_presets
+                    
+                    if script_info.arguments and has_presets:
+                        # Script has presets - create preset submenu
+                        action = self._create_preset_submenu_action(script_info, display_name)
+                    elif script_info.arguments or needs_config:
+                        # Script needs configuration - show warning and config option
+                        action = self._create_script_action_needing_config(script_info, display_name, needs_config)
                     else:
                         # Simple script - direct execution
                         action = self._create_simple_script_action(script_info, display_name)
@@ -264,6 +271,52 @@ class TrayManager(QObject):
         
         # Create the main action that shows the submenu
         main_action = QAction(display_text, self)
+        main_action.setMenu(submenu)
+        self.script_menus[display_name] = submenu
+        
+        return main_action
+    
+    def _create_script_action_needing_config(self, script_info: ScriptInfo, display_name: str, needs_config: bool) -> QAction:
+        """Create action for scripts that need configuration"""
+        if needs_config:
+            display_text = f"⚠️ {display_name} (needs config)"
+        else:
+            display_text = display_name
+        
+        action = QAction(display_text, self)
+        action.triggered.connect(lambda checked, s=script_info: self._handle_script_needing_config(s))
+        return action
+    
+    def _create_preset_submenu_action(self, script_info: ScriptInfo, display_name: str) -> QAction:
+        """Create submenu action for scripts with presets"""
+        script_name = script_info.file_path.stem
+        presets = self.settings.get_script_presets(script_name)
+        
+        if not presets:
+            # Fallback to simple action if no presets
+            return self._create_simple_script_action(script_info, display_name)
+        
+        submenu = QMenu(display_name, self.context_menu)
+        submenu.setFont(self.context_menu.font())
+        
+        # Add preset options
+        for preset_name in presets.keys():
+            preset_action = QAction(preset_name, submenu)
+            preset_action.triggered.connect(
+                lambda checked, s=script_info, preset=preset_name: self._execute_script_with_preset(s, preset)
+            )
+            submenu.addAction(preset_action)
+        
+        # Add separator and configure option
+        submenu.addSeparator()
+        config_action = QAction("Configure Presets...", submenu)
+        config_action.triggered.connect(
+            lambda checked, s=script_info: self._open_preset_configuration(s)
+        )
+        submenu.addAction(config_action)
+        
+        # Create main action
+        main_action = QAction(display_name, self)
         main_action.setMenu(submenu)
         self.script_menus[display_name] = submenu
         
@@ -374,6 +427,70 @@ class TrayManager(QObject):
                     str(e),
                     QSystemTrayIcon.MessageIcon.Critical
                 )
+    
+    def _execute_script_with_preset(self, script_info: ScriptInfo, preset_name: str):
+        """Execute script with a specific preset configuration"""
+        try:
+            script_name = script_info.file_path.stem
+            preset_args = self.settings.get_preset_arguments(script_name, preset_name)
+            
+            logger.info(f"Executing script {script_info.display_name} with preset '{preset_name}': {preset_args}")
+            
+            result = self.script_loader.execute_script(script_name, preset_args)
+            
+            # Show notification if enabled
+            if self.settings.should_show_notifications():
+                if result.get('success'):
+                    self.show_notification(
+                        f"Script Executed: {script_info.display_name}",
+                        f"Used preset: {preset_name}"
+                    )
+                else:
+                    self.show_notification(
+                        f"Script Failed: {script_info.display_name}",
+                        result.get('message', 'Execution failed'),
+                        QSystemTrayIcon.MessageIcon.Warning
+                    )
+            
+            self.script_executed.emit(script_info.display_name, result)
+            
+        except Exception as e:
+            error_msg = f"Error executing script {script_info.display_name} with preset {preset_name}: {str(e)}"
+            logger.error(error_msg)
+            if self.settings.should_show_notifications():
+                self.show_notification(
+                    f"Script Error: {script_info.display_name}",
+                    str(e),
+                    QSystemTrayIcon.MessageIcon.Critical
+                )
+    
+    def _handle_script_needing_config(self, script_info: ScriptInfo):
+        """Handle click on script that needs configuration"""
+        script_name = script_info.file_path.stem
+        
+        # Check if script has any presets now (might have been configured since menu creation)
+        if self.settings.has_script_presets(script_name):
+            # Script has presets now, refresh menu
+            self.update_scripts()
+            return
+        
+        # Show message about needing configuration
+        from PyQt6.QtWidgets import QMessageBox
+        msg = QMessageBox(QMessageBox.Icon.Information, 
+                         "Script Configuration Needed",
+                         f"The script '{script_info.display_name}' requires configuration before it can be run.\n\n"
+                         f"Please set up presets in the Settings dialog.",
+                         QMessageBox.StandardButton.Ok)
+        msg.exec()
+        
+        # Open settings dialog to preset tab
+        self._open_preset_configuration(script_info)
+    
+    def _open_preset_configuration(self, script_info: ScriptInfo):
+        """Open the preset configuration dialog for a script"""
+        # This will be implemented when we create the settings dialog UI
+        # For now, emit a signal to open settings
+        self.settings_requested.emit()
     
     def _update_script_statuses(self):
         """Update script status displays in menu"""

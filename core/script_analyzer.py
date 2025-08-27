@@ -35,6 +35,7 @@ class ScriptInfo:
     has_main_block: bool = False
     is_executable: bool = False
     error: Optional[str] = None
+    needs_configuration: bool = False
     
     def __post_init__(self):
         if self.arguments is None:
@@ -65,6 +66,9 @@ class ScriptAnalyzer:
             # Determine execution strategy
             execution_strategy = self._determine_execution_strategy(has_main_function, has_main_block, arguments)
             
+            # Determine if script needs configuration
+            needs_configuration = self._determine_configuration_needs(arguments)
+            
             return ScriptInfo(
                 file_path=script_path,
                 display_name=display_name,
@@ -72,7 +76,8 @@ class ScriptAnalyzer:
                 main_function='main' if has_main_function else None,
                 arguments=arguments,
                 has_main_block=has_main_block,
-                is_executable=True
+                is_executable=True,
+                needs_configuration=needs_configuration
             )
             
         except Exception as e:
@@ -238,6 +243,19 @@ class ScriptAnalyzer:
         
         # Default to module execution
         return ExecutionStrategy.MODULE_EXEC
+    
+    def _determine_configuration_needs(self, arguments: List[ArgumentInfo]) -> bool:
+        """Determine if a script needs user configuration based on its arguments."""
+        if not arguments:
+            return False
+        
+        # Script needs configuration if it has any required arguments
+        # or arguments without default values
+        for arg in arguments:
+            if arg.required or arg.default is None:
+                return True
+        
+        return False
     
     def test_script_execution(self, script_info: ScriptInfo) -> bool:
         """Test if a script can be executed successfully."""
