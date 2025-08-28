@@ -53,18 +53,12 @@ class SettingsDialog(QDialog):
         
         # Create and add Presets tab
         self.presets_tab = self._create_presets_tab()
-        self.tab_widget.addTab(self.presets_tab, "Presets")
+        self.tab_widget.addTab(self.presets_tab, "Script Args")
         
         # Dialog buttons
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | 
-            QDialogButtonBox.StandardButton.Cancel |
-            QDialogButtonBox.StandardButton.Apply
-        )
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         
         button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        button_box.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.apply_settings)
         
         layout.addWidget(button_box)
     
@@ -145,7 +139,23 @@ class SettingsDialog(QDialog):
         # Add stretch to push content to top
         layout.addStretch()
         
-        # Connect change handlers
+        # Connect immediate save handlers
+        # Startup settings
+        self.run_on_startup_checkbox.stateChanged.connect(self._on_run_on_startup_changed)
+        self.start_minimized_checkbox.stateChanged.connect(self._on_start_minimized_changed)
+        self.show_startup_notification.stateChanged.connect(self._on_show_startup_notification_changed)
+        
+        # Behavior settings
+        self.minimize_to_tray_checkbox.stateChanged.connect(self._on_minimize_to_tray_changed)
+        self.close_to_tray_checkbox.stateChanged.connect(self._on_close_to_tray_changed)
+        self.single_instance_checkbox.stateChanged.connect(self._on_single_instance_changed)
+        self.show_notifications_checkbox.stateChanged.connect(self._on_show_notifications_changed)
+        
+        # Appearance settings
+        self.font_combo.currentTextChanged.connect(self._on_font_family_changed)
+        self.font_size_spinbox.valueChanged.connect(self._on_font_size_changed)
+        
+        # Special handler for startup dependencies
         self.run_on_startup_checkbox.stateChanged.connect(self._on_startup_changed)
         
         return widget
@@ -314,43 +324,82 @@ class SettingsDialog(QDialog):
         self.font_size_spinbox.setValue(self.settings.get_font_size())
         
     
-    def apply_settings(self):
+    
+    def accept(self):
+        super().accept()
+    
+    def _on_run_on_startup_changed(self, checked):
+        """Handle immediate saving of run on startup setting"""
         try:
-            # Save startup settings
-            run_on_startup = self.run_on_startup_checkbox.isChecked()
-            if not self.startup_manager.set_startup(run_on_startup):
+            if not self.startup_manager.set_startup(checked):
                 QMessageBox.warning(self, "Warning", 
                                    "Failed to update Windows startup settings. "
                                    "You may need to run the application as administrator.")
-            
-            self.settings.set_start_minimized(self.start_minimized_checkbox.isChecked())
-            self.settings.set('startup/show_notification', self.show_startup_notification.isChecked())
-            
-            # Save behavior settings
-            self.settings.set('behavior/minimize_to_tray', self.minimize_to_tray_checkbox.isChecked())
-            self.settings.set('behavior/close_to_tray', self.close_to_tray_checkbox.isChecked())
-            self.settings.set('behavior/single_instance', self.single_instance_checkbox.isChecked())
-            self.settings.set('behavior/show_script_notifications', self.show_notifications_checkbox.isChecked())
-            
-            # Save appearance settings
-            self.settings.set_font_family(self.font_combo.currentText())
-            self.settings.set_font_size(self.font_size_spinbox.value())
-            
-            # Sync settings
-            self.settings.sync()
-            
-            # Emit signal that settings have changed
-            self.settings_changed.emit()
-            
-            logger.info("Settings applied successfully")
-            
+                # Revert the checkbox if setting failed
+                self.run_on_startup_checkbox.blockSignals(True)
+                self.run_on_startup_checkbox.setChecked(not checked)
+                self.run_on_startup_checkbox.blockSignals(False)
         except Exception as e:
-            logger.error(f"Error applying settings: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to apply settings: {str(e)}")
+            logger.error(f"Error setting startup: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to update startup settings: {str(e)}")
     
-    def accept(self):
-        self.apply_settings()
-        super().accept()
+    def _on_start_minimized_changed(self, checked):
+        """Handle immediate saving of start minimized setting"""
+        try:
+            self.settings.set_start_minimized(checked)
+        except Exception as e:
+            logger.error(f"Error setting start minimized: {e}")
+    
+    def _on_show_startup_notification_changed(self, checked):
+        """Handle immediate saving of startup notification setting"""
+        try:
+            self.settings.set('startup/show_notification', checked)
+        except Exception as e:
+            logger.error(f"Error setting startup notification: {e}")
+    
+    def _on_minimize_to_tray_changed(self, checked):
+        """Handle immediate saving of minimize to tray setting"""
+        try:
+            self.settings.set('behavior/minimize_to_tray', checked)
+        except Exception as e:
+            logger.error(f"Error setting minimize to tray: {e}")
+    
+    def _on_close_to_tray_changed(self, checked):
+        """Handle immediate saving of close to tray setting"""
+        try:
+            self.settings.set('behavior/close_to_tray', checked)
+        except Exception as e:
+            logger.error(f"Error setting close to tray: {e}")
+    
+    def _on_single_instance_changed(self, checked):
+        """Handle immediate saving of single instance setting"""
+        try:
+            self.settings.set('behavior/single_instance', checked)
+        except Exception as e:
+            logger.error(f"Error setting single instance: {e}")
+    
+    def _on_show_notifications_changed(self, checked):
+        """Handle immediate saving of show notifications setting"""
+        try:
+            self.settings.set('behavior/show_script_notifications', checked)
+        except Exception as e:
+            logger.error(f"Error setting show notifications: {e}")
+    
+    def _on_font_family_changed(self, font_family):
+        """Handle immediate saving of font family setting"""
+        try:
+            self.settings.set_font_family(font_family)
+            self.settings_changed.emit()
+        except Exception as e:
+            logger.error(f"Error setting font family: {e}")
+    
+    def _on_font_size_changed(self, font_size):
+        """Handle immediate saving of font size setting"""
+        try:
+            self.settings.set_font_size(font_size)
+            self.settings_changed.emit()
+        except Exception as e:
+            logger.error(f"Error setting font size: {e}")
     
     def _on_startup_changed(self, state):
         # Enable/disable "start minimized" when startup is toggled
