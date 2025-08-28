@@ -531,3 +531,37 @@ class SettingsManager(QObject):
     def has_external_scripts(self) -> bool:
         """Check if any external scripts are configured."""
         return len(self.get_external_scripts()) > 0
+    
+    # Disabled scripts management methods
+    def get_disabled_scripts(self) -> set:
+        """Get all disabled script names as a set."""
+        result = set()
+        self.settings.beginGroup('disabled_scripts')
+        try:
+            for key in self.settings.allKeys():
+                if self.settings.value(key, False, bool):
+                    result.add(key)
+        finally:
+            self.settings.endGroup()
+        return result
+    
+    def set_script_disabled(self, script_name: str, disabled: bool):
+        """Enable or disable a native script."""
+        script_name = script_name.strip()
+        if not script_name:
+            return
+        
+        self.settings.beginGroup('disabled_scripts')
+        try:
+            if disabled:
+                self.settings.setValue(script_name, True)
+                logger.debug(f"Script '{script_name}' disabled")
+            else:
+                self.settings.remove(script_name)
+                logger.debug(f"Script '{script_name}' enabled")
+        finally:
+            self.settings.endGroup()
+    
+    def is_script_disabled(self, script_name: str) -> bool:
+        """Check if a native script is disabled."""
+        return script_name in self.get_disabled_scripts()

@@ -20,9 +20,105 @@ CUSTOM_NAME_COLOR = Qt.GlobalColor.cyan
 
 logger = logging.getLogger('GUI.SettingsDialog')
 
+class ScriptNameWidget(QWidget):
+    """Custom widget for script names with +/- buttons"""
+    
+    def __init__(self, script_name: str, is_external: bool, is_disabled: bool, parent=None):
+        super().__init__(parent)
+        self.script_name = script_name
+        self.is_external = is_external
+        self.is_disabled = is_disabled
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(8)
+        
+        # Script name label
+        self.name_label = QLabel(script_name)
+        self.name_label.setStyleSheet("color: white;")
+        layout.addWidget(self.name_label)
+        
+        # Spacer to push button to the right
+        layout.addStretch()
+        
+        # +/- button
+        self.action_button = QPushButton()
+        self.action_button.setMaximumSize(20, 20)
+        self.action_button.setMinimumSize(20, 20)
+        self.action_button.setStyleSheet("""
+            QPushButton {
+                background-color: #555555;
+                border: 1px solid #777777;
+                color: white;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #666666;
+            }
+            QPushButton:pressed {
+                background-color: #444444;
+            }
+        """)
+        
+        self.update_button_state()
+        layout.addWidget(self.action_button)
+        
+    def update_button_state(self):
+        """Update button text and tooltip based on script state"""
+        if self.is_external:
+            # External scripts always show "-" for removal
+            self.action_button.setText("-")
+            self.action_button.setToolTip("Remove external script")
+        elif self.is_disabled:
+            # Disabled native scripts show "+" for enabling
+            self.action_button.setText("+")
+            self.action_button.setToolTip("Enable script")
+            self.name_label.setStyleSheet("color: #888888;")  # Gray out disabled scripts
+        else:
+            # Enabled native scripts show "-" for disabling  
+            self.action_button.setText("-")
+            self.action_button.setToolTip("Disable script")
+            self.name_label.setStyleSheet("color: white;")
+    
+    def set_disabled_state(self, disabled: bool):
+        """Update the disabled state and refresh the UI"""
+        self.is_disabled = disabled
+        self.update_button_state()
+
+class AddNewScriptWidget(QWidget):
+    """Special widget for the 'Add New Script...' row"""
+    add_script_clicked = pyqtSignal()
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(8)
+        
+        # "Add New Script..." label
+        self.label = QLabel("+ Add New Script...")
+        self.label.setStyleSheet("color: cyan; font-style: italic;")
+        self.label.setToolTip("Click to add an external Python script")
+        layout.addWidget(self.label)
+        
+        # Spacer to fill the rest
+        layout.addStretch()
+        
+        # Make the entire widget clickable
+        self.setToolTip("Click to add an external Python script")
+        
+    def mousePressEvent(self, event):
+        """Handle mouse clicks on the widget"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.add_script_clicked.emit()
+        super().mousePressEvent(event)
+
 class SettingsDialog(QDialog):
     settings_changed = pyqtSignal()
     hotkeys_changed = pyqtSignal()
+    scripts_changed = pyqtSignal()  # Emitted when scripts are added/removed/disabled/enabled
     
     def __init__(self, script_loader: ScriptLoader = None, parent=None):
         super().__init__(parent)
@@ -56,9 +152,7 @@ class SettingsDialog(QDialog):
         self.presets_tab = self._create_presets_tab()
         self.tab_widget.addTab(self.presets_tab, "Script Args")
         
-        # Create and add External Scripts tab
-        self.external_scripts_tab = self._create_external_scripts_tab()
-        self.tab_widget.addTab(self.external_scripts_tab, "External Scripts")
+        # External script functionality is now integrated into Scripts tab
         
         # Dialog buttons
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
@@ -172,7 +266,8 @@ class SettingsDialog(QDialog):
 
         # Instructions
         instructions = QLabel(
-            "Configure display names and hotkeys for scripts. Click on a cell to edit its value."
+            "Configure display names and hotkeys for scripts. Click on a cell to edit its value. "
+            "Click the \"Add New Script...\" row at the bottom to add external Python scripts."
         )
         instructions.setWordWrap(True)
         layout.addWidget(instructions)
@@ -310,75 +405,6 @@ class SettingsDialog(QDialog):
         
         return widget
     
-    def _create_external_scripts_tab(self) -> QWidget:
-        """Create the External Scripts configuration tab"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        # Instructions
-        instructions = QLabel(
-            "Add Python scripts from any location on your computer. "
-            "External scripts will appear in the tray menu alongside default scripts."
-        )
-        instructions.setWordWrap(True)
-        layout.addWidget(instructions)
-        
-        # Create table for external scripts
-        self.external_scripts_table = QTableWidget()
-        self.external_scripts_table.setColumnCount(4)
-        self.external_scripts_table.setHorizontalHeaderLabels(["Script Name", "File Path", "Status", "Actions"])
-        
-        # Set table styling
-        self.external_scripts_table.setStyleSheet("""
-            QTableWidget {
-                background-color: #2b2b2b;
-                alternate-background-color: #3c3c3c;
-                gridline-color: #555555;
-                color: #ffffff;
-            }
-            QTableWidget::item {
-                padding: 4px;
-                color: #ffffff;
-            }
-            QTableWidget::item:selected {
-                background-color: #0078d4;
-            }
-            QHeaderView::section {
-                background-color: #404040;
-                color: #ffffff;
-                padding: 4px;
-                border: 1px solid #555555;
-            }
-        """)
-        
-        # Configure table
-        self.external_scripts_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.external_scripts_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.external_scripts_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.external_scripts_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.external_scripts_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.external_scripts_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        
-        layout.addWidget(self.external_scripts_table)
-        
-        # Buttons
-        buttons_layout = QHBoxLayout()
-        
-        add_external_script_button = QPushButton("Add External Script")
-        add_external_script_button.clicked.connect(self._add_external_script)
-        buttons_layout.addWidget(add_external_script_button)
-        
-        refresh_external_button = QPushButton("Refresh")
-        refresh_external_button.clicked.connect(self._refresh_external_scripts_table)
-        buttons_layout.addWidget(refresh_external_button)
-        
-        buttons_layout.addStretch()
-        layout.addLayout(buttons_layout)
-        
-        # Load external scripts table
-        self._refresh_external_scripts_table()
-        
-        return widget
 
     def load_settings(self):
         # Block signals to prevent immediate-save handlers from firing during initialization
@@ -505,6 +531,8 @@ class SettingsDialog(QDialog):
             return
         
         scripts = self.script_loader.discover_scripts()
+        external_scripts = self.settings.get_external_scripts()
+        disabled_scripts = self.settings.get_disabled_scripts()
         
         for script_info in scripts:
             try:
@@ -512,52 +540,116 @@ class SettingsDialog(QDialog):
                 script_filename = script_info.file_path.name
                 display_name = self.script_loader.get_script_display_name(script_info)
                 hotkey = self.hotkey_registry.get_hotkey(original_name)
+                
+                # Check script states
+                is_external = original_name in external_scripts
+                is_disabled = original_name in disabled_scripts and not is_external  # Only native scripts can be disabled
 
                 row_position = self.scripts_table.rowCount()
                 self.scripts_table.insertRow(row_position)
 
-                # Script filename
-                name_item = QTableWidgetItem(script_filename)
-                name_item.setData(Qt.ItemDataRole.UserRole, script_info)
-                name_item.setForeground(Qt.GlobalColor.white)
-                self.scripts_table.setItem(row_position, 0, name_item)
+                # Custom script name widget with +/- button
+                script_widget = ScriptNameWidget(script_filename, is_external, is_disabled, self)
+                script_widget.action_button.clicked.connect(
+                    lambda checked, name=original_name, external=is_external: 
+                    self._on_script_action_button_clicked(name, external)
+                )
+                
+                # Store script_info in the widget for later reference
+                script_widget.setProperty("script_info", script_info)
+                
+                self.scripts_table.setCellWidget(row_position, 0, script_widget)
 
                 # Display Name
                 display_item = QTableWidgetItem(display_name)
                 display_item.setToolTip("Click to edit display name")
-                custom_name = self.settings.get_custom_name(original_name)
-                if custom_name:
-                    display_item.setForeground(CUSTOM_NAME_COLOR)
-                    font = display_item.font()
-                    font.setItalic(True)
-                    display_item.setFont(font)
+                display_item.setData(Qt.ItemDataRole.UserRole, script_info)  # Store script_info for click handling
+                
+                # Apply styling based on script state
+                if is_disabled:
+                    display_item.setForeground(Qt.GlobalColor.gray)
                 else:
-                    display_item.setForeground(Qt.GlobalColor.white)
+                    custom_name = self.settings.get_custom_name(original_name)
+                    if custom_name:
+                        display_item.setForeground(CUSTOM_NAME_COLOR)
+                        font = display_item.font()
+                        font.setItalic(True)
+                        display_item.setFont(font)
+                    else:
+                        display_item.setForeground(Qt.GlobalColor.white)
                 self.scripts_table.setItem(row_position, 1, display_item)
 
                 # Hotkey
                 hotkey_item = QTableWidgetItem(hotkey if hotkey else "(empty)")
-                hotkey_item.setForeground(Qt.GlobalColor.white if hotkey else Qt.GlobalColor.gray)
+                hotkey_item.setData(Qt.ItemDataRole.UserRole, script_info)  # Store script_info for click handling
+                
+                if is_disabled:
+                    hotkey_item.setForeground(Qt.GlobalColor.gray)
+                else:
+                    hotkey_item.setForeground(Qt.GlobalColor.white if hotkey else Qt.GlobalColor.gray)
                 self.scripts_table.setItem(row_position, 2, hotkey_item)
+                
 
             except Exception as e:
                 logger.error(f"Error adding script to scripts table: {e}")
+        
+        # Add the "Add New Script..." row at the bottom
+        row_position = self.scripts_table.rowCount()
+        self.scripts_table.insertRow(row_position)
+        
+        # Create special ScriptNameWidget for adding new scripts
+        add_script_widget = AddNewScriptWidget(self)
+        add_script_widget.add_script_clicked.connect(self._add_external_script)
+        self.scripts_table.setCellWidget(row_position, 0, add_script_widget)
+        
+        empty_item1 = QTableWidgetItem("")
+        empty_item1.setForeground(Qt.GlobalColor.gray)
+        self.scripts_table.setItem(row_position, 1, empty_item1)
+        
+        empty_item2 = QTableWidgetItem("")
+        empty_item2.setForeground(Qt.GlobalColor.gray)
+        self.scripts_table.setItem(row_position, 2, empty_item2)
+        
 
     def _on_script_cell_clicked(self, row: int, column: int):
         """Handle clicks on cells in the scripts table"""
-        name_item = self.scripts_table.item(row, 0)
-        if not name_item:
+        if column == 0:
+            # Column 0 uses custom widgets now, so clicks are handled by the +/- button
             return
         
-        script_info = name_item.data(Qt.ItemDataRole.UserRole)
-        if not script_info:
+        # For columns 1 and 2, get script info from the clicked item
+        clicked_item = self.scripts_table.item(row, column)
+        if not clicked_item:
             return
+        
+        script_data = clicked_item.data(Qt.ItemDataRole.UserRole)
+        if not script_data:
+            return
+        
+        # Regular script handling
+        script_info = script_data
         original_name = script_info.display_name
 
         if column == 1:  # Display Name
             self._edit_display_name(row, original_name)
         elif column == 2:  # Hotkey
             self._edit_hotkey(row, original_name)
+    
+    def _on_script_action_button_clicked(self, script_name: str, is_external: bool):
+        """Handle +/- button clicks with different logic for native vs external scripts"""
+        if is_external:
+            # External script: remove it entirely
+            self._remove_external_script(script_name)
+        else:
+            # Native script: toggle enabled/disabled state
+            current_disabled = self.settings.is_script_disabled(script_name)
+            self.settings.set_script_disabled(script_name, not current_disabled)
+            
+            # Refresh the table to show the updated state
+            self._refresh_scripts_table()
+            
+            # Emit signal to notify other components (like tray manager)
+            self.scripts_changed.emit()
 
     def _edit_display_name(self, row: int, original_name: str):
         """Handle editing of display name"""
@@ -781,51 +873,6 @@ class SettingsDialog(QDialog):
                 self._on_preset_script_changed(self.presets_script_combo.currentText())
     
     # External scripts management methods
-    def _refresh_external_scripts_table(self):
-        """Refresh the external scripts table with current external scripts"""
-        self.external_scripts_table.setRowCount(0)
-        
-        external_scripts = self.settings.get_external_scripts()
-        
-        for script_name, script_path in external_scripts.items():
-            row_position = self.external_scripts_table.rowCount()
-            self.external_scripts_table.insertRow(row_position)
-            
-            # Script Name
-            name_item = QTableWidgetItem(script_name)
-            name_item.setForeground(Qt.GlobalColor.white)
-            self.external_scripts_table.setItem(row_position, 0, name_item)
-            
-            # File Path
-            path_item = QTableWidgetItem(script_path)
-            path_item.setForeground(Qt.GlobalColor.white)
-            self.external_scripts_table.setItem(row_position, 1, path_item)
-            
-            # Status
-            status = "Valid" if self.settings.validate_external_script_path(script_path) else "Invalid/Missing"
-            status_item = QTableWidgetItem(status)
-            if status == "Valid":
-                status_item.setForeground(Qt.GlobalColor.green)
-            else:
-                status_item.setForeground(Qt.GlobalColor.red)
-            self.external_scripts_table.setItem(row_position, 2, status_item)
-            
-            # Actions (create buttons widget)
-            actions_widget = QWidget()
-            actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(4, 2, 4, 2)
-            
-            # Browse button
-            browse_button = QPushButton("Browse")
-            browse_button.clicked.connect(lambda checked, name=script_name: self._browse_external_script(name))
-            actions_layout.addWidget(browse_button)
-            
-            # Remove button
-            remove_button = QPushButton("Remove")
-            remove_button.clicked.connect(lambda checked, name=script_name: self._remove_external_script(name))
-            actions_layout.addWidget(remove_button)
-            
-            self.external_scripts_table.setCellWidget(row_position, 3, actions_widget)
     
     def _add_external_script(self):
         """Add a new external script"""
@@ -869,11 +916,13 @@ class SettingsDialog(QDialog):
                 "Script Added",
                 f"External script '{script_name}' has been added successfully."
             )
-            self._refresh_external_scripts_table()
-            
-            # Refresh the main scripts if script_loader is available
+            # Refresh the main scripts table to include the new external script
             if self.script_loader:
                 self.script_loader.refresh_external_scripts()
+            self._refresh_scripts_table()
+            
+            # Emit signal to notify other components (like tray manager)
+            self.scripts_changed.emit()
         else:
             QMessageBox.warning(
                 self,
@@ -903,11 +952,13 @@ class SettingsDialog(QDialog):
                 "Path Updated",
                 f"Path for external script '{script_name}' has been updated successfully."
             )
-            self._refresh_external_scripts_table()
-            
-            # Refresh the external scripts if script_loader is available
+            # Refresh the scripts table to show the updated external script
             if self.script_loader:
                 self.script_loader.refresh_external_scripts()
+            self._refresh_scripts_table()
+            
+            # Emit signal to notify other components (like tray manager)
+            self.scripts_changed.emit()
         else:
             QMessageBox.warning(
                 self,
@@ -930,8 +981,10 @@ class SettingsDialog(QDialog):
                 "Script Removed",
                 f"External script '{script_name}' has been removed."
             )
-            self._refresh_external_scripts_table()
-            
-            # Refresh the scripts if script_loader is available
+            # Refresh the scripts table to remove the external script
             if self.script_loader:
                 self.script_loader.refresh_external_scripts()
+            self._refresh_scripts_table()
+            
+            # Emit signal to notify other components (like tray manager)
+            self.scripts_changed.emit()

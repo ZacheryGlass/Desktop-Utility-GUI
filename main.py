@@ -148,6 +148,9 @@ def main():
     # Connect hotkey changes to tray manager
     window.hotkeys_changed.connect(tray_manager.refresh_hotkeys)
     
+    # Connect script changes to tray manager
+    window.scripts_reloaded.connect(tray_manager.update_scripts)
+    
     # Connect settings changes to font updates
     def update_fonts():
         apply_font_settings(app, settings)
