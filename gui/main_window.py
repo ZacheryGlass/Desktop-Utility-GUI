@@ -44,6 +44,11 @@ class MainWindow(QMainWindow):
             self.settings_dialog.settings_changed.connect(self._on_settings_changed)
             self.settings_dialog.hotkeys_changed.connect(self._on_hotkeys_changed)
         
+        # Prevent recursive calls - check if dialog is already visible
+        if self.settings_dialog.isVisible():
+            logger.warning("Settings dialog is already open, ignoring request")
+            return
+        
         self.settings_dialog.load_settings()  # Reload current settings
         self.settings_dialog.exec()
     
