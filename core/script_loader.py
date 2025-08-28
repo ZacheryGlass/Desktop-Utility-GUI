@@ -28,6 +28,22 @@ class ScriptLoader:
         scripts = []
         self.failed_scripts.clear()
         
+        # Discover scripts from default directory
+        default_scripts = self._discover_default_scripts()
+        scripts.extend(default_scripts)
+        
+        # Discover external scripts
+        external_scripts = self._discover_external_scripts()
+        scripts.extend(external_scripts)
+        
+        logger.info(f"Script discovery complete: {len(scripts)} total scripts loaded, {len(self.failed_scripts)} failed")
+        return scripts
+    
+    def _discover_default_scripts(self) -> List[ScriptInfo]:
+        """Discover scripts from the default scripts directory."""
+        logger.debug(f"Discovering default scripts in: {self.scripts_directory}")
+        scripts = []
+        
         if not self.scripts_directory.exists():
             logger.warning(f"Scripts directory does not exist, creating: {self.scripts_directory}")
             self.scripts_directory.mkdir(parents=True, exist_ok=True)
@@ -50,17 +66,61 @@ class ScriptLoader:
                 if script_info.is_executable:
                     scripts.append(script_info)
                     self.loaded_scripts[script_file.stem] = script_info
-                    logger.info(f"Successfully analyzed script: {script_file.name}")
+                    logger.info(f"Successfully analyzed default script: {script_file.name}")
                 else:
                     error_msg = f"Script not executable: {script_info.error}"
                     self.failed_scripts[script_file.name] = error_msg
-                    logger.warning(f"Script {script_file.name} is not executable: {script_info.error}")
+                    logger.warning(f"Default script {script_file.name} is not executable: {script_info.error}")
             except Exception as e:
                 error_msg = f"Failed to analyze {script_file.name}: {str(e)}"
                 self.failed_scripts[script_file.name] = error_msg
-                logger.error(f"Error analyzing script: {error_msg}")
+                logger.error(f"Error analyzing default script: {error_msg}")
         
-        logger.info(f"Script discovery complete: {len(scripts)} loaded, {len(self.failed_scripts)} failed")
+        logger.info(f"Default script discovery: {len(scripts)} loaded")
+        return scripts
+    
+    def _discover_external_scripts(self) -> List[ScriptInfo]:
+        """Discover scripts from external paths configured in settings."""
+        logger.debug("Discovering external scripts")
+        scripts = []
+        
+        external_scripts = self.settings.get_external_scripts()
+        logger.info(f"Found {len(external_scripts)} configured external scripts")
+        
+        for script_name, script_path in external_scripts.items():
+            try:
+                script_file = Path(script_path)
+                
+                # Validate the path still exists and is valid
+                if not self.settings.validate_external_script_path(script_path):
+                    error_msg = f"External script path is invalid or missing: {script_path}"
+                    self.failed_scripts[f"{script_name} (external)"] = error_msg
+                    logger.warning(error_msg)
+                    continue
+                
+                logger.debug(f"Attempting to analyze external script: {script_name} -> {script_path}")
+                script_info = self.analyzer.analyze_script(script_file)
+                
+                if script_info.is_executable:
+                    # Override the display name with the configured name
+                    script_info.display_name = script_name
+                    
+                    # Use the configured name as the key for external scripts
+                    # This allows external scripts to have custom names that differ from filename
+                    scripts.append(script_info)
+                    self.loaded_scripts[script_name] = script_info
+                    logger.info(f"Successfully analyzed external script: {script_name} -> {script_path}")
+                else:
+                    error_msg = f"External script not executable: {script_info.error}"
+                    self.failed_scripts[f"{script_name} (external)"] = error_msg
+                    logger.warning(f"External script {script_name} is not executable: {script_info.error}")
+                    
+            except Exception as e:
+                error_msg = f"Failed to analyze external script {script_name} at {script_path}: {str(e)}"
+                self.failed_scripts[f"{script_name} (external)"] = error_msg
+                logger.error(error_msg)
+        
+        logger.info(f"External script discovery: {len(scripts)} loaded")
         return scripts
     
     def execute_script(self, script_name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -149,3 +209,33 @@ class ScriptLoader:
     def get_all_scripts(self) -> List[ScriptInfo]:
         """Get all loaded script info objects."""
         return list(self.loaded_scripts.values())
+    
+    def is_external_script(self, script_name: str) -> bool:
+        """Check if a script is an external script (loaded from external path)."""
+        external_scripts = self.settings.get_external_scripts()
+        return script_name in external_scripts
+    
+    def get_external_script_path(self, script_name: str) -> Optional[str]:
+        """Get the external path for an external script."""
+        return self.settings.get_external_script_path(script_name)
+    
+    def refresh_external_scripts(self) -> List[ScriptInfo]:
+        """Refresh only external scripts without affecting default scripts."""
+        logger.info("Refreshing external scripts")
+        
+        # Remove external scripts from loaded_scripts
+        external_script_names = list(self.settings.get_external_scripts().keys())
+        for script_name in external_script_names:
+            if script_name in self.loaded_scripts:
+                del self.loaded_scripts[script_name]
+        
+        # Remove external script failures from failed_scripts
+        failed_keys_to_remove = [key for key in self.failed_scripts.keys() if "(external)" in key]
+        for key in failed_keys_to_remove:
+            del self.failed_scripts[key]
+        
+        # Rediscover external scripts
+        external_scripts = self._discover_external_scripts()
+        
+        # Return all currently loaded scripts (default + refreshed external)
+        return self.get_all_scripts()

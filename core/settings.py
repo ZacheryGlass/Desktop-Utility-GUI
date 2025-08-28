@@ -48,6 +48,10 @@ class SettingsManager(QObject):
             # Script presets will be stored as 'script_presets/ScriptName/PresetName/ArgName': 'value'
             # Example: 'script_presets/audio_toggle/Headphones/device': 'headphones'
             # This is just a placeholder for the schema
+        },
+        'external_scripts': {
+            # External scripts will be stored as 'external_scripts/ScriptName': '/absolute/path/to/script.py'
+            # This is just a placeholder for the schema
         }
     }
     
@@ -404,3 +408,126 @@ class SettingsManager(QObject):
         """Get arguments for a specific preset."""
         presets = self.get_script_presets(script_name)
         return presets.get(preset_name, {})
+    
+    # External scripts management methods
+    def get_external_scripts(self) -> Dict[str, str]:
+        """Get all external scripts as a dict of {script_name: absolute_path}."""
+        result = {}
+        self.settings.beginGroup('external_scripts')
+        try:
+            for key in self.settings.allKeys():
+                result[key] = self.settings.value(key, '')
+        finally:
+            self.settings.endGroup()
+        return result
+    
+    def add_external_script(self, script_name: str, absolute_path: str) -> bool:
+        """Add an external script. Returns True if successful, False if validation failed."""
+        script_name = script_name.strip()
+        absolute_path = absolute_path.strip()
+        
+        if not script_name or not absolute_path:
+            logger.warning("External script name and path cannot be empty")
+            return False
+        
+        # Validate the script path
+        if not self.validate_external_script_path(absolute_path):
+            logger.warning(f"Invalid external script path: {absolute_path}")
+            return False
+        
+        # Check for naming conflicts with existing external scripts
+        existing_externals = self.get_external_scripts()
+        if script_name in existing_externals:
+            logger.warning(f"External script name '{script_name}' already exists")
+            return False
+        
+        # Validate script name (similar to custom name validation)
+        if not self._validate_external_script_name(script_name):
+            logger.warning(f"Invalid external script name: {script_name}")
+            return False
+        
+        # Store the external script
+        self.set(f'external_scripts/{script_name}', absolute_path)
+        logger.info(f"Added external script: {script_name} -> {absolute_path}")
+        return True
+    
+    def remove_external_script(self, script_name: str) -> None:
+        """Remove an external script by name."""
+        key = f'external_scripts/{script_name}'
+        if self.settings.contains(key):
+            self.settings.remove(key)
+            self.settings.sync()
+            logger.info(f"Removed external script: {script_name}")
+    
+    def update_external_script_path(self, script_name: str, new_absolute_path: str) -> bool:
+        """Update the path for an existing external script."""
+        if not self.validate_external_script_path(new_absolute_path):
+            logger.warning(f"Invalid external script path: {new_absolute_path}")
+            return False
+        
+        key = f'external_scripts/{script_name}'
+        if self.settings.contains(key):
+            self.set(key, new_absolute_path)
+            logger.info(f"Updated external script path: {script_name} -> {new_absolute_path}")
+            return True
+        else:
+            logger.warning(f"External script '{script_name}' not found")
+            return False
+    
+    def validate_external_script_path(self, path: str) -> bool:
+        """Validate that the external script path is valid."""
+        if not path or not isinstance(path, str):
+            return False
+        
+        try:
+            from pathlib import Path
+            script_path = Path(path)
+            
+            # Must be absolute path
+            if not script_path.is_absolute():
+                logger.debug(f"Path is not absolute: {path}")
+                return False
+            
+            # Must exist and be a file
+            if not script_path.exists() or not script_path.is_file():
+                logger.debug(f"Path does not exist or is not a file: {path}")
+                return False
+            
+            # Must be a Python file
+            if script_path.suffix.lower() != '.py':
+                logger.debug(f"Path is not a Python file: {path}")
+                return False
+            
+            # Basic security check - prevent directory traversal attempts
+            # This is mainly to catch obvious attempts, not comprehensive security
+            normalized_path = str(script_path.resolve())
+            if '..' in normalized_path or normalized_path != str(script_path.resolve()):
+                logger.debug(f"Suspicious path detected: {path}")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error validating external script path {path}: {e}")
+            return False
+    
+    def _validate_external_script_name(self, name: str) -> bool:
+        """Validate external script name meets requirements."""
+        # Similar validation to custom names but for script names
+        # Length validation (1-50 characters)
+        if len(name) < 1 or len(name) > 50:
+            return False
+        
+        # Character validation - allow alphanumeric, spaces, underscores, hyphens
+        if not re.match(r'^[a-zA-Z0-9\s\-_]+$', name):
+            return False
+        
+        return True
+    
+    def get_external_script_path(self, script_name: str) -> Optional[str]:
+        """Get the absolute path for a specific external script."""
+        return self.get(f'external_scripts/{script_name}')
+    
+    def has_external_scripts(self) -> bool:
+        """Check if any external scripts are configured."""
+        return len(self.get_external_scripts()) > 0

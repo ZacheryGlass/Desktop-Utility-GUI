@@ -3,7 +3,8 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox,
                              QCheckBox, QComboBox, QLabel, QPushButton,
                              QDialogButtonBox, QMessageBox, QWidget, QTabWidget,
                              QTableWidget, QTableWidgetItem, QHeaderView,
-                             QAbstractItemView, QFontComboBox, QSpinBox)
+                             QAbstractItemView, QFontComboBox, QSpinBox, QFileDialog,
+                             QInputDialog)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
@@ -54,6 +55,10 @@ class SettingsDialog(QDialog):
         # Create and add Presets tab
         self.presets_tab = self._create_presets_tab()
         self.tab_widget.addTab(self.presets_tab, "Script Args")
+        
+        # Create and add External Scripts tab
+        self.external_scripts_tab = self._create_external_scripts_tab()
+        self.tab_widget.addTab(self.external_scripts_tab, "External Scripts")
         
         # Dialog buttons
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
@@ -302,6 +307,76 @@ class SettingsDialog(QDialog):
         
         # Load initial data
         self._refresh_presets_script_combo()
+        
+        return widget
+    
+    def _create_external_scripts_tab(self) -> QWidget:
+        """Create the External Scripts configuration tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # Instructions
+        instructions = QLabel(
+            "Add Python scripts from any location on your computer. "
+            "External scripts will appear in the tray menu alongside default scripts."
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        
+        # Create table for external scripts
+        self.external_scripts_table = QTableWidget()
+        self.external_scripts_table.setColumnCount(4)
+        self.external_scripts_table.setHorizontalHeaderLabels(["Script Name", "File Path", "Status", "Actions"])
+        
+        # Set table styling
+        self.external_scripts_table.setStyleSheet("""
+            QTableWidget {
+                background-color: #2b2b2b;
+                alternate-background-color: #3c3c3c;
+                gridline-color: #555555;
+                color: #ffffff;
+            }
+            QTableWidget::item {
+                padding: 4px;
+                color: #ffffff;
+            }
+            QTableWidget::item:selected {
+                background-color: #0078d4;
+            }
+            QHeaderView::section {
+                background-color: #404040;
+                color: #ffffff;
+                padding: 4px;
+                border: 1px solid #555555;
+            }
+        """)
+        
+        # Configure table
+        self.external_scripts_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.external_scripts_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.external_scripts_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.external_scripts_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.external_scripts_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.external_scripts_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        
+        layout.addWidget(self.external_scripts_table)
+        
+        # Buttons
+        buttons_layout = QHBoxLayout()
+        
+        add_external_script_button = QPushButton("Add External Script")
+        add_external_script_button.clicked.connect(self._add_external_script)
+        buttons_layout.addWidget(add_external_script_button)
+        
+        refresh_external_button = QPushButton("Refresh")
+        refresh_external_button.clicked.connect(self._refresh_external_scripts_table)
+        buttons_layout.addWidget(refresh_external_button)
+        
+        buttons_layout.addStretch()
+        layout.addLayout(buttons_layout)
+        
+        # Load external scripts table
+        self._refresh_external_scripts_table()
         
         return widget
 
@@ -688,3 +763,159 @@ class SettingsDialog(QDialog):
                 # Save the new/updated preset
                 self.settings.save_script_preset(script_name, new_preset_name, arguments)
                 self._on_preset_script_changed(self.presets_script_combo.currentText())
+    
+    # External scripts management methods
+    def _refresh_external_scripts_table(self):
+        """Refresh the external scripts table with current external scripts"""
+        self.external_scripts_table.setRowCount(0)
+        
+        external_scripts = self.settings.get_external_scripts()
+        
+        for script_name, script_path in external_scripts.items():
+            row_position = self.external_scripts_table.rowCount()
+            self.external_scripts_table.insertRow(row_position)
+            
+            # Script Name
+            name_item = QTableWidgetItem(script_name)
+            name_item.setForeground(Qt.GlobalColor.white)
+            self.external_scripts_table.setItem(row_position, 0, name_item)
+            
+            # File Path
+            path_item = QTableWidgetItem(script_path)
+            path_item.setForeground(Qt.GlobalColor.white)
+            self.external_scripts_table.setItem(row_position, 1, path_item)
+            
+            # Status
+            status = "Valid" if self.settings.validate_external_script_path(script_path) else "Invalid/Missing"
+            status_item = QTableWidgetItem(status)
+            if status == "Valid":
+                status_item.setForeground(Qt.GlobalColor.green)
+            else:
+                status_item.setForeground(Qt.GlobalColor.red)
+            self.external_scripts_table.setItem(row_position, 2, status_item)
+            
+            # Actions (create buttons widget)
+            actions_widget = QWidget()
+            actions_layout = QHBoxLayout(actions_widget)
+            actions_layout.setContentsMargins(4, 2, 4, 2)
+            
+            # Browse button
+            browse_button = QPushButton("Browse")
+            browse_button.clicked.connect(lambda checked, name=script_name: self._browse_external_script(name))
+            actions_layout.addWidget(browse_button)
+            
+            # Remove button
+            remove_button = QPushButton("Remove")
+            remove_button.clicked.connect(lambda checked, name=script_name: self._remove_external_script(name))
+            actions_layout.addWidget(remove_button)
+            
+            self.external_scripts_table.setCellWidget(row_position, 3, actions_widget)
+    
+    def _add_external_script(self):
+        """Add a new external script"""
+        # Get script name from user
+        script_name, ok = QInputDialog.getText(
+            self,
+            "Add External Script",
+            "Enter a name for this script:"
+        )
+        
+        if not ok or not script_name.strip():
+            return
+        
+        script_name = script_name.strip()
+        
+        # Check if name already exists
+        existing_externals = self.settings.get_external_scripts()
+        if script_name in existing_externals:
+            QMessageBox.warning(
+                self,
+                "Name Already Exists",
+                f"An external script with the name '{script_name}' already exists. Please choose a different name."
+            )
+            return
+        
+        # Get script file from user
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Python Script",
+            "",
+            "Python Files (*.py)"
+        )
+        
+        if not file_path:
+            return
+        
+        # Add the external script
+        if self.settings.add_external_script(script_name, file_path):
+            QMessageBox.information(
+                self,
+                "Script Added",
+                f"External script '{script_name}' has been added successfully."
+            )
+            self._refresh_external_scripts_table()
+            
+            # Refresh the main scripts if script_loader is available
+            if self.script_loader:
+                self.script_loader.refresh_external_scripts()
+        else:
+            QMessageBox.warning(
+                self,
+                "Failed to Add Script",
+                f"Failed to add external script '{script_name}'. The file path may be invalid or the name may contain invalid characters."
+            )
+    
+    def _browse_external_script(self, script_name: str):
+        """Browse for a new path for an existing external script"""
+        current_path = self.settings.get_external_script_path(script_name)
+        
+        # Get new script file from user
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"Select New Path for '{script_name}'",
+            current_path or "",
+            "Python Files (*.py)"
+        )
+        
+        if not file_path:
+            return
+        
+        # Update the external script path
+        if self.settings.update_external_script_path(script_name, file_path):
+            QMessageBox.information(
+                self,
+                "Path Updated",
+                f"Path for external script '{script_name}' has been updated successfully."
+            )
+            self._refresh_external_scripts_table()
+            
+            # Refresh the external scripts if script_loader is available
+            if self.script_loader:
+                self.script_loader.refresh_external_scripts()
+        else:
+            QMessageBox.warning(
+                self,
+                "Failed to Update Path",
+                f"Failed to update path for external script '{script_name}'. The file path may be invalid."
+            )
+    
+    def _remove_external_script(self, script_name: str):
+        """Remove an external script"""
+        reply = QMessageBox.question(
+            self, "Remove External Script",
+            f"Are you sure you want to remove the external script '{script_name}'?\n\nThis will not delete the actual file.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.settings.remove_external_script(script_name)
+            QMessageBox.information(
+                self,
+                "Script Removed",
+                f"External script '{script_name}' has been removed."
+            )
+            self._refresh_external_scripts_table()
+            
+            # Refresh the scripts if script_loader is available
+            if self.script_loader:
+                self.script_loader.refresh_external_scripts()
