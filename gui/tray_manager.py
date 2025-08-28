@@ -152,9 +152,41 @@ class TrayManager(QObject):
         if not self.script_loader:
             return
         
-        self.scripts = self.script_loader.discover_scripts()
+        # Discover all scripts
+        all_scripts = self.script_loader.discover_scripts()
+        
+        # Filter out disabled native scripts and missing external scripts
+        self.scripts = self._filter_available_scripts(all_scripts)
+        
         self._rebuild_scripts_menu()
         self._register_hotkeys()
+    
+    def _filter_available_scripts(self, all_scripts):
+        """Filter out disabled native scripts and handle missing external scripts"""
+        filtered_scripts = []
+        disabled_scripts = self.settings.get_disabled_scripts()
+        external_scripts = self.settings.get_external_scripts()
+        
+        for script_info in all_scripts:
+            script_name = script_info.display_name
+            is_external = script_name in external_scripts
+            
+            # Skip disabled native scripts (external scripts are never "disabled", only removed)
+            if not is_external and script_name in disabled_scripts:
+                logger.debug(f"Filtering out disabled native script: {script_name}")
+                continue
+            
+            # For external scripts, check if the file still exists
+            if is_external:
+                script_path = external_scripts.get(script_name)
+                if not self.settings.validate_external_script_path(script_path):
+                    logger.warning(f"Filtering out missing external script: {script_name} -> {script_path}")
+                    continue
+            
+            filtered_scripts.append(script_info)
+        
+        logger.info(f"Filtered scripts: {len(filtered_scripts)} available out of {len(all_scripts)} total")
+        return filtered_scripts
     
     def _rebuild_scripts_menu(self):
         # Clear everything except title and first separator
@@ -231,9 +263,7 @@ class TrayManager(QObject):
         """Create action for simple scripts without arguments"""
         display_text = display_name
         
-        # Add external script indicator
-        if self.script_loader.is_external_script(display_name):
-            display_text = f"📁 {display_text}"
+        # External scripts no longer get visual indicators
         
         # Get status for display
         status = self.script_loader.get_script_status(display_name)
@@ -287,9 +317,7 @@ class TrayManager(QObject):
         else:
             display_text = display_name
         
-        # Add external script indicator
-        if self.script_loader.is_external_script(display_name):
-            display_text = f"📁 {display_text}"
+        # External scripts no longer get visual indicators
         
         action = QAction(display_text, self)
         action.triggered.connect(lambda checked, s=script_info: self._handle_script_needing_config(s))
@@ -304,10 +332,8 @@ class TrayManager(QObject):
             # Fallback to simple action if no presets
             return self._create_simple_script_action(script_info, display_name)
         
-        # Add external script indicator to submenu title
+        # External scripts no longer get visual indicators
         menu_title = display_name
-        if self.script_loader.is_external_script(display_name):
-            menu_title = f"📁 {display_name}"
         
         submenu = QMenu(menu_title, self.context_menu)
         submenu.setFont(self.context_menu.font())
@@ -525,9 +551,7 @@ class TrayManager(QObject):
                     status = self.script_loader.get_script_status(script_key)
                     
                     display_text = display_name
-                    # Add external script indicator
-                    if self.script_loader.is_external_script(display_name):
-                        display_text = f"📁 {display_text}"
+                    # External scripts no longer get visual indicators
                     
                     if status and status != "Ready":
                         display_text += f" [{status}]"

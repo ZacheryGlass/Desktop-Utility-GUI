@@ -43,6 +43,7 @@ class MainWindow(QMainWindow):
             self.settings_dialog = SettingsDialog(self.script_loader, self)
             self.settings_dialog.settings_changed.connect(self._on_settings_changed)
             self.settings_dialog.hotkeys_changed.connect(self._on_hotkeys_changed)
+            self.settings_dialog.scripts_changed.connect(self._on_scripts_changed)
         
         # Prevent recursive calls - check if dialog is already visible
         if self.settings_dialog.isVisible():
@@ -62,3 +63,8 @@ class MainWindow(QMainWindow):
         """Handle hotkey changes"""
         logger.info("Hotkeys changed, refreshing registrations")
         self.hotkeys_changed.emit()
+    
+    def _on_scripts_changed(self):
+        """Handle scripts changes (disabled/enabled/added/removed)"""
+        logger.info("Scripts changed, refreshing script list")
+        self.scripts_reloaded.emit()
