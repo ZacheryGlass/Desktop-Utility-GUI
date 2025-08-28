@@ -231,8 +231,12 @@ class TrayManager(QObject):
         """Create action for simple scripts without arguments"""
         display_text = display_name
         
+        # Add external script indicator
+        if self.script_loader.is_external_script(display_name):
+            display_text = f"📁 {display_text}"
+        
         # Get status for display
-        status = self.script_loader.get_script_status(script_info.file_path.stem)
+        status = self.script_loader.get_script_status(display_name)
         if status and status != "Ready":
             display_text += f" [{status}]"
         
@@ -283,6 +287,10 @@ class TrayManager(QObject):
         else:
             display_text = display_name
         
+        # Add external script indicator
+        if self.script_loader.is_external_script(display_name):
+            display_text = f"📁 {display_text}"
+        
         action = QAction(display_text, self)
         action.triggered.connect(lambda checked, s=script_info: self._handle_script_needing_config(s))
         return action
@@ -296,7 +304,12 @@ class TrayManager(QObject):
             # Fallback to simple action if no presets
             return self._create_simple_script_action(script_info, display_name)
         
-        submenu = QMenu(display_name, self.context_menu)
+        # Add external script indicator to submenu title
+        menu_title = display_name
+        if self.script_loader.is_external_script(display_name):
+            menu_title = f"📁 {display_name}"
+        
+        submenu = QMenu(menu_title, self.context_menu)
         submenu.setFont(self.context_menu.font())
         
         # Add preset options
@@ -316,7 +329,7 @@ class TrayManager(QObject):
         submenu.addAction(config_action)
         
         # Create main action
-        main_action = QAction(display_name, self)
+        main_action = QAction(menu_title, self)
         main_action.setMenu(submenu)
         self.script_menus[display_name] = submenu
         
@@ -327,7 +340,9 @@ class TrayManager(QObject):
         try:
             logger.info(f"Executing simple script: {script_info.display_name}")
             
-            result = self.script_loader.execute_script(script_info.file_path.stem)
+            # For external scripts, use the display name; for default scripts, use file stem
+            script_key = script_info.display_name if self.script_loader.is_external_script(script_info.display_name) else script_info.file_path.stem
+            result = self.script_loader.execute_script(script_key)
             
             # Show notification if enabled
             if self.settings.should_show_notifications():
@@ -361,7 +376,9 @@ class TrayManager(QObject):
             logger.info(f"Executing script {script_info.display_name} with {arg_name}={choice}")
             
             arguments = {arg_name: choice}
-            result = self.script_loader.execute_script(script_info.file_path.stem, arguments)
+            # For external scripts, use the display name; for default scripts, use file stem
+            script_key = script_info.display_name if self.script_loader.is_external_script(script_info.display_name) else script_info.file_path.stem
+            result = self.script_loader.execute_script(script_key, arguments)
             
             # Show notification if enabled
             if self.settings.should_show_notifications():
@@ -392,15 +409,18 @@ class TrayManager(QObject):
     def _execute_script_with_dialog(self, script_info: ScriptInfo):
         """Execute script by showing input dialog for arguments"""
         try:
+            # For external scripts, use the display name; for default scripts, use file stem
+            script_key = script_info.display_name if self.script_loader.is_external_script(script_info.display_name) else script_info.file_path.stem
+            
             # Get currently configured arguments
-            current_args = self.script_loader.get_script_arguments(script_info.file_path.stem)
+            current_args = self.script_loader.get_script_arguments(script_key)
             
             # For now, execute with current settings
             # TODO: Implement argument configuration dialog for scripts that need user input
             #       This should show before execution if script has configurable arguments
             logger.info(f"Executing script {script_info.display_name} with current arguments")
             
-            result = self.script_loader.execute_script(script_info.file_path.stem, current_args)
+            result = self.script_loader.execute_script(script_key, current_args)
             
             # Show notification if enabled
             if self.settings.should_show_notifications():
@@ -431,12 +451,13 @@ class TrayManager(QObject):
     def _execute_script_with_preset(self, script_info: ScriptInfo, preset_name: str):
         """Execute script with a specific preset configuration"""
         try:
-            script_name = script_info.file_path.stem
-            preset_args = self.settings.get_preset_arguments(script_name, preset_name)
+            # For external scripts, use the display name; for default scripts, use file stem
+            script_key = script_info.display_name if self.script_loader.is_external_script(script_info.display_name) else script_info.file_path.stem
+            preset_args = self.settings.get_preset_arguments(script_key, preset_name)
             
             logger.info(f"Executing script {script_info.display_name} with preset '{preset_name}': {preset_args}")
             
-            result = self.script_loader.execute_script(script_name, preset_args)
+            result = self.script_loader.execute_script(script_key, preset_args)
             
             # Show notification if enabled
             if self.settings.should_show_notifications():
@@ -466,10 +487,11 @@ class TrayManager(QObject):
     
     def _handle_script_needing_config(self, script_info: ScriptInfo):
         """Handle click on script that needs configuration"""
-        script_name = script_info.file_path.stem
+        # For external scripts, use the display name; for default scripts, use file stem
+        script_key = script_info.display_name if self.script_loader.is_external_script(script_info.display_name) else script_info.file_path.stem
         
         # Check if script has any presets now (might have been configured since menu creation)
-        if self.settings.has_script_presets(script_name):
+        if self.settings.has_script_presets(script_key):
             # Script has presets now, refresh menu
             self.update_scripts()
             return
@@ -498,9 +520,15 @@ class TrayManager(QObject):
             for display_name, action in self.script_actions.items():
                 if display_name in self.script_name_to_info:
                     script_info = self.script_name_to_info[display_name]
-                    status = self.script_loader.get_script_status(script_info.file_path.stem)
+                    # For external scripts, use the display name; for default scripts, use file stem
+                    script_key = display_name if self.script_loader.is_external_script(display_name) else script_info.file_path.stem
+                    status = self.script_loader.get_script_status(script_key)
                     
                     display_text = display_name
+                    # Add external script indicator
+                    if self.script_loader.is_external_script(display_name):
+                        display_text = f"📁 {display_text}"
+                    
                     if status and status != "Ready":
                         display_text += f" [{status}]"
                     
