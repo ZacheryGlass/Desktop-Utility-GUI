@@ -160,7 +160,7 @@ class SettingsDialog(QDialog):
         self.font_combo.currentTextChanged.connect(self._on_font_family_changed)
         self.font_size_spinbox.valueChanged.connect(self._on_font_size_changed)
         
-        # Special handler for startup dependencies
+        # Handler for startup dependencies (enabling/disabling dependent controls)
         self.run_on_startup_checkbox.stateChanged.connect(self._on_startup_changed)
         
         return widget
@@ -381,22 +381,38 @@ class SettingsDialog(QDialog):
         return widget
 
     def load_settings(self):
-        # Load startup settings
-        self.run_on_startup_checkbox.setChecked(self.startup_manager.is_registered())
-        self.start_minimized_checkbox.setChecked(self.settings.is_start_minimized())
-        self.show_startup_notification.setChecked(self.settings.get('startup/show_notification', True))
+        # Block signals to prevent immediate-save handlers from firing during initialization
+        controls_to_block = [
+            self.run_on_startup_checkbox, self.start_minimized_checkbox,
+            self.show_startup_notification, self.minimize_to_tray_checkbox,
+            self.close_to_tray_checkbox, self.single_instance_checkbox,
+            self.show_notifications_checkbox, self.font_combo, self.font_size_spinbox
+        ]
         
-        # Load behavior settings
-        self.minimize_to_tray_checkbox.setChecked(self.settings.is_minimize_to_tray())
-        self.close_to_tray_checkbox.setChecked(self.settings.is_close_to_tray())
-        self.single_instance_checkbox.setChecked(self.settings.get('behavior/single_instance', True))
-        self.show_notifications_checkbox.setChecked(self.settings.should_show_notifications())
+        for control in controls_to_block:
+            control.blockSignals(True)
         
-        # Load appearance settings
-        font_family = self.settings.get_font_family()
-        if font_family != 'System Default':
-            self.font_combo.setCurrentText(font_family)
-        self.font_size_spinbox.setValue(self.settings.get_font_size())
+        try:
+            # Load startup settings
+            self.run_on_startup_checkbox.setChecked(self.startup_manager.is_registered())
+            self.start_minimized_checkbox.setChecked(self.settings.is_start_minimized())
+            self.show_startup_notification.setChecked(self.settings.get('startup/show_notification', True))
+            
+            # Load behavior settings
+            self.minimize_to_tray_checkbox.setChecked(self.settings.is_minimize_to_tray())
+            self.close_to_tray_checkbox.setChecked(self.settings.is_close_to_tray())
+            self.single_instance_checkbox.setChecked(self.settings.get('behavior/single_instance', True))
+            self.show_notifications_checkbox.setChecked(self.settings.should_show_notifications())
+            
+            # Load appearance settings
+            font_family = self.settings.get_font_family()
+            if font_family != 'System Default':
+                self.font_combo.setCurrentText(font_family)
+            self.font_size_spinbox.setValue(self.settings.get_font_size())
+        finally:
+            # Re-enable signals
+            for control in controls_to_block:
+                control.blockSignals(False)
         
     
     
