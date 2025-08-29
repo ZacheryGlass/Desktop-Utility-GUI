@@ -364,6 +364,12 @@ class SettingsDialog(QDialog):
         delete_preset_button.clicked.connect(self._delete_preset)
         preset_buttons_layout.addWidget(delete_preset_button)
         
+        self.auto_generate_button = QPushButton("Auto-Generate Presets")
+        self.auto_generate_button.clicked.connect(self._auto_generate_presets)
+        self.auto_generate_button.setToolTip("Automatically generate presets for all possible argument combinations")
+        self.auto_generate_button.setEnabled(False)  # Disabled by default
+        preset_buttons_layout.addWidget(self.auto_generate_button)
+        
         preset_buttons_layout.addStretch()
         layout.addLayout(preset_buttons_layout)
         
@@ -837,6 +843,10 @@ class SettingsDialog(QDialog):
         # Load presets for first script
         if self.presets_script_combo.count() > 0:
             self._on_preset_script_changed(self.presets_script_combo.currentText())
+        else:
+            # No scripts available - disable the button
+            self.auto_generate_button.setEnabled(False)
+            self.auto_generate_button.setToolTip("No scripts with arguments available")
     
     def _on_preset_script_changed(self, script_display_name: str):
         """Handle script selection change in presets tab"""
@@ -849,7 +859,36 @@ class SettingsDialog(QDialog):
         
         script_info = self.presets_script_combo.itemData(current_index)
         if not script_info:
+            self.auto_generate_button.setEnabled(False)
+            self.auto_generate_button.setToolTip("No script selected")
             return
+        
+        # Update auto-generate button based on script eligibility
+        is_eligible = self._is_script_eligible_for_auto_generation(script_info)
+        self.auto_generate_button.setEnabled(is_eligible)
+        
+        if is_eligible:
+            # Count how many presets would be generated
+            choice_args = [arg for arg in script_info.arguments if arg.choices]
+            total_combinations = 1
+            for arg in choice_args:
+                total_combinations *= len(arg.choices)
+            
+            self.auto_generate_button.setToolTip(
+                f"Generate {total_combinations} preset(s) for all possible argument combinations"
+            )
+        else:
+            # Determine why script is not eligible
+            if not script_info.arguments:
+                reason = "Script has no arguments"
+            else:
+                has_choices = any(arg.choices for arg in script_info.arguments)
+                if not has_choices:
+                    reason = "Script has no arguments with predefined choices"
+                else:
+                    reason = "Script has required arguments without predefined choices"
+            
+            self.auto_generate_button.setToolTip(f"Auto-generation not available: {reason}")
         
         script_name = script_info.file_path.stem
         presets = self.settings.get_script_presets(script_name)
@@ -953,6 +992,158 @@ class SettingsDialog(QDialog):
                 # Save the new/updated preset
                 self.settings.save_script_preset(script_name, new_preset_name, arguments)
                 self._on_preset_script_changed(self.presets_script_combo.currentText())
+    
+    def _is_script_eligible_for_auto_generation(self, script_info) -> bool:
+        """Check if a script is eligible for auto-generating presets"""
+        if not script_info or not script_info.arguments:
+            return False
+        
+        # A script is eligible if all arguments either have choices or are optional
+        for arg in script_info.arguments:
+            # If argument has no choices and is required, it's not eligible
+            if not arg.choices and (arg.required or arg.default is None):
+                return False
+        
+        # Additional check: must have at least one argument with choices
+        has_choices_arg = any(arg.choices for arg in script_info.arguments)
+        return has_choices_arg
+    
+    def _auto_generate_presets(self):
+        """Auto-generate presets for the selected script"""
+        current_index = self.presets_script_combo.currentIndex()
+        if current_index < 0:
+            QMessageBox.information(self, "No Script Selected", "Please select a script first.")
+            return
+        
+        script_info = self.presets_script_combo.itemData(current_index)
+        if not script_info or not self._is_script_eligible_for_auto_generation(script_info):
+            QMessageBox.warning(
+                self, "Script Not Eligible",
+                "The selected script is not eligible for auto-generation. "
+                "Only scripts with arguments that have predefined choices can be auto-generated."
+            )
+            return
+        
+        # Generate all possible preset combinations
+        self._generate_preset_combinations(script_info)
+    
+    def _generate_preset_combinations(self, script_info):
+        """Generate all possible preset combinations for a script"""
+        from itertools import product
+        
+        script_name = script_info.file_path.stem
+        
+        # Get arguments with choices
+        choice_args = []
+        optional_args = []
+        
+        for arg in script_info.arguments:
+            if arg.choices:
+                choice_args.append((arg.name, arg.choices))
+            elif not arg.required and arg.default is not None:
+                optional_args.append((arg.name, arg.default))
+        
+        if not choice_args:
+            QMessageBox.warning(
+                self, "No Choices Available",
+                "No arguments with predefined choices found for auto-generation."
+            )
+            return
+        
+        # Calculate total combinations
+        total_combinations = 1
+        for _, choices in choice_args:
+            total_combinations *= len(choices)
+        
+        # Confirm with user before generating many presets
+        if total_combinations > 10:
+            reply = QMessageBox.question(
+                self, "Confirm Auto-Generation",
+                f"This will generate {total_combinations} presets for '{script_info.display_name}'.\n\n"
+                f"Do you want to continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        
+        # Generate combinations
+        choice_names = [name for name, _ in choice_args]
+        choice_values = [choices for _, choices in choice_args]
+        
+        generated_presets = []
+        conflicts = []
+        
+        for combination in product(*choice_values):
+            # Create preset arguments
+            preset_args = dict(zip(choice_names, combination))
+            
+            # Add optional arguments with defaults
+            for name, default in optional_args:
+                preset_args[name] = default
+            
+            # Create meaningful preset name
+            preset_name = self._create_preset_name(combination, choice_names)
+            
+            # Check if preset already exists
+            existing_presets = self.settings.get_script_presets(script_name)
+            if preset_name in existing_presets:
+                conflicts.append(preset_name)
+            else:
+                generated_presets.append((preset_name, preset_args))
+        
+        # Handle conflicts
+        if conflicts:
+            conflict_message = f"The following preset names already exist:\n" + "\n".join(f"• {name}" for name in conflicts)
+            conflict_message += f"\n\nDo you want to overwrite existing presets?"
+            
+            reply = QMessageBox.question(
+                self, "Preset Conflicts",
+                conflict_message,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Include conflicted presets in generation (will overwrite)
+                for combination in product(*choice_values):
+                    preset_args = dict(zip(choice_names, combination))
+                    for name, default in optional_args:
+                        preset_args[name] = default
+                    preset_name = self._create_preset_name(combination, choice_names)
+                    if preset_name in conflicts:
+                        generated_presets.append((preset_name, preset_args))
+        
+        # Generate the presets
+        if generated_presets:
+            for preset_name, preset_args in generated_presets:
+                self.settings.save_script_preset(script_name, preset_name, preset_args)
+            
+            QMessageBox.information(
+                self, "Presets Generated",
+                f"Successfully generated {len(generated_presets)} preset(s) for '{script_info.display_name}'."
+            )
+            
+            # Refresh the presets table
+            self._on_preset_script_changed(self.presets_script_combo.currentText())
+        else:
+            QMessageBox.information(
+                self, "No Presets Generated",
+                "No new presets were generated."
+            )
+    
+    def _create_preset_name(self, combination, choice_names):
+        """Create a meaningful preset name from argument combination"""
+        if len(combination) == 1:
+            # Single argument: use the choice value directly
+            return str(combination[0])
+        else:
+            # Multiple arguments: create descriptive name
+            parts = []
+            for i, (name, value) in enumerate(zip(choice_names, combination)):
+                if i == 0:
+                    parts.append(str(value))
+                else:
+                    parts.append(f"{name}={value}")
+            return " - ".join(parts)
     
     def _reset_all_settings(self):
         """Reset all application settings to defaults"""
