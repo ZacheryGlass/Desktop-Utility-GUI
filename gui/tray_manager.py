@@ -119,9 +119,9 @@ class TrayManager(QObject):
     
     def _setup_context_menu(self):
         """Setup the basic context menu structure"""
-        # Title
+        # Title (clickable to open settings)
         title_action = QAction("Desktop Utilities", self)
-        title_action.setEnabled(False)
+        title_action.triggered.connect(self.settings_requested.emit)
         title_font = title_action.font()
         title_font.setBold(True)
         title_action.setFont(title_font)
@@ -131,13 +131,8 @@ class TrayManager(QObject):
         
         # Scripts will be added here by update_scripts()
         
-        # Bottom separator and settings
+        # Bottom separator and exit
         self.context_menu.addSeparator()
-        
-        # Settings action
-        settings_action = QAction("Settings", self)
-        settings_action.triggered.connect(self.settings_requested.emit)
-        self.context_menu.addAction(settings_action)
         
         # Exit action
         exit_action = QAction("Exit", self)
@@ -210,9 +205,9 @@ class TrayManager(QObject):
                     actions_to_keep.append(actions[i + 1])
                 break
         
-        # Keep bottom separator and settings/exit
-        if len(actions) >= 3:
-            actions_to_keep.extend(actions[-3:])  # separator, settings, exit
+        # Keep bottom separator and exit
+        if len(actions) >= 2:
+            actions_to_keep.extend(actions[-2:])  # separator, exit
         
         # Remove all other actions
         for action in actions:
@@ -229,12 +224,12 @@ class TrayManager(QObject):
             no_scripts_action = QAction("No scripts available", self)
             no_scripts_action.setEnabled(False)
             # Insert before the bottom separator
-            bottom_actions = self.context_menu.actions()[-3:]
+            bottom_actions = self.context_menu.actions()[-2:]
             if bottom_actions:
                 self.context_menu.insertAction(bottom_actions[0], no_scripts_action)
         else:
             # Add scripts
-            bottom_actions = self.context_menu.actions()[-3:]
+            bottom_actions = self.context_menu.actions()[-2:]
             for script_info in self.scripts:
                 try:
                     display_name = self.script_loader.get_script_display_name(script_info)
