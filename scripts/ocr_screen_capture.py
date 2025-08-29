@@ -69,9 +69,15 @@ def get_global_root():
     """Get or create the global tkinter root instance"""
     global _global_root
     if _global_root is None or not tk._default_root:
+        # Create root window in withdrawn state to prevent visible flash
         _global_root = tk.Tk()
-        _global_root.withdraw()
+        _global_root.withdraw()  # Hide immediately after creation
+        _global_root.overrideredirect(True)  # Remove window decorations temporarily
+        _global_root.attributes('-alpha', 0.0)  # Make completely transparent during setup
         _global_root.attributes('-topmost', False)
+        # Reset properties after hiding
+        _global_root.overrideredirect(False)
+        _global_root.attributes('-alpha', 1.0)
     return _global_root
 
 
