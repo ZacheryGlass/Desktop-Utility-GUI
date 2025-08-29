@@ -152,6 +152,9 @@ class TrayManager(QObject):
         if not self.script_loader:
             return
         
+        # Refresh external scripts to ensure we have the latest changes
+        self.script_loader.refresh_external_scripts()
+        
         # Discover all scripts
         all_scripts = self.script_loader.discover_scripts()
         
