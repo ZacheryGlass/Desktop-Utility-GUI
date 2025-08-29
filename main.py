@@ -123,6 +123,18 @@ def main():
     app.setStyle("Fusion")
     logger.info(f"Application style set to: Fusion")
     
+    # Load and apply custom stylesheet
+    try:
+        style_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'style.qss')
+        if os.path.exists(style_path):
+            with open(style_path, 'r', encoding='utf-8') as f:
+                app.setStyleSheet(f.read())
+            logger.info(f"Applied custom stylesheet: {style_path}")
+        else:
+            logger.warning(f"Custom stylesheet not found: {style_path}")
+    except Exception as e:
+        logger.error(f"Failed to load custom stylesheet: {e}")
+    
     # Apply font settings
     apply_font_settings(app, settings)
     

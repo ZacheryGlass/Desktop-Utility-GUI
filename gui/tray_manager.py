@@ -370,8 +370,8 @@ class TrayManager(QObject):
             script_key = script_info.display_name if self.script_loader.is_external_script(script_info.display_name) else script_info.file_path.stem
             result = self.script_loader.execute_script(script_key)
             
-            # Show notification if enabled
-            if self.settings.should_show_notifications():
+            # Show notification if enabled for this script
+            if self.settings.should_show_script_notifications(script_key):
                 if result.get('success'):
                     self.show_notification(
                         f"Script Executed: {script_info.display_name}",
@@ -389,7 +389,8 @@ class TrayManager(QObject):
         except Exception as e:
             error_msg = f"Error executing script {script_info.display_name}: {str(e)}"
             logger.error(error_msg)
-            if self.settings.should_show_notifications():
+            script_key = script_info.display_name if self.script_loader.is_external_script(script_info.display_name) else script_info.file_path.stem
+            if self.settings.should_show_script_notifications(script_key):
                 self.show_notification(
                     f"Script Error: {script_info.display_name}",
                     str(e),
@@ -406,8 +407,8 @@ class TrayManager(QObject):
             script_key = script_info.display_name if self.script_loader.is_external_script(script_info.display_name) else script_info.file_path.stem
             result = self.script_loader.execute_script(script_key, arguments)
             
-            # Show notification if enabled
-            if self.settings.should_show_notifications():
+            # Show notification if enabled for this script
+            if self.settings.should_show_script_notifications(script_key):
                 if result.get('success'):
                     self.show_notification(
                         f"Script Executed: {script_info.display_name}",
@@ -425,7 +426,8 @@ class TrayManager(QObject):
         except Exception as e:
             error_msg = f"Error executing script {script_info.display_name}: {str(e)}"
             logger.error(error_msg)
-            if self.settings.should_show_notifications():
+            script_key = script_info.display_name if self.script_loader.is_external_script(script_info.display_name) else script_info.file_path.stem
+            if self.settings.should_show_script_notifications(script_key):
                 self.show_notification(
                     f"Script Error: {script_info.display_name}",
                     str(e),
@@ -448,8 +450,8 @@ class TrayManager(QObject):
             
             result = self.script_loader.execute_script(script_key, current_args)
             
-            # Show notification if enabled
-            if self.settings.should_show_notifications():
+            # Show notification if enabled for this script
+            if self.settings.should_show_script_notifications(script_key):
                 if result.get('success'):
                     self.show_notification(
                         f"Script Executed: {script_info.display_name}",
@@ -467,7 +469,8 @@ class TrayManager(QObject):
         except Exception as e:
             error_msg = f"Error executing script {script_info.display_name}: {str(e)}"
             logger.error(error_msg)
-            if self.settings.should_show_notifications():
+            script_key = script_info.display_name if self.script_loader.is_external_script(script_info.display_name) else script_info.file_path.stem
+            if self.settings.should_show_script_notifications(script_key):
                 self.show_notification(
                     f"Script Error: {script_info.display_name}",
                     str(e),
@@ -485,8 +488,8 @@ class TrayManager(QObject):
             
             result = self.script_loader.execute_script(script_key, preset_args)
             
-            # Show notification if enabled
-            if self.settings.should_show_notifications():
+            # Show notification if enabled for this script
+            if self.settings.should_show_script_notifications(script_key):
                 if result.get('success'):
                     self.show_notification(
                         f"Script Executed: {script_info.display_name}",
@@ -504,7 +507,8 @@ class TrayManager(QObject):
         except Exception as e:
             error_msg = f"Error executing script {script_info.display_name} with preset {preset_name}: {str(e)}"
             logger.error(error_msg)
-            if self.settings.should_show_notifications():
+            script_key = script_info.display_name if self.script_loader.is_external_script(script_info.display_name) else script_info.file_path.stem
+            if self.settings.should_show_script_notifications(script_key):
                 self.show_notification(
                     f"Script Error: {script_info.display_name}",
                     str(e),

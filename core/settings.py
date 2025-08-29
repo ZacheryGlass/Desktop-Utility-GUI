@@ -52,6 +52,10 @@ class SettingsManager(QObject):
         'external_scripts': {
             # External scripts will be stored as 'external_scripts/ScriptName': '/absolute/path/to/script.py'
             # This is just a placeholder for the schema
+        },
+        'script_notifications': {
+            # Per-script notification settings will be stored as 'script_notifications/ScriptName': boolean
+            # This is just a placeholder for the schema
         }
     }
     
@@ -140,6 +144,66 @@ class SettingsManager(QObject):
     
     def should_show_notifications(self) -> bool:
         return self.get('behavior/show_script_notifications', True)
+    
+    def should_show_script_notifications(self, script_name: str) -> bool:
+        """Check if notifications should be shown for a specific script.
+        
+        Args:
+            script_name: The original script name (not display name)
+            
+        Returns:
+            True if notifications should be shown for this script
+        """
+        # Check for per-script setting first
+        per_script_key = f'script_notifications/{script_name}'
+        if self.settings.contains(per_script_key):
+            return self.get(per_script_key, True)
+        
+        # Fall back to global setting
+        return self.should_show_notifications()
+    
+    def set_script_notifications(self, script_name: str, enabled: bool) -> None:
+        """Set notification preference for a specific script.
+        
+        Args:
+            script_name: The original script name (not display name)
+            enabled: Whether to show notifications for this script
+        """
+        self.set(f'script_notifications/{script_name}', enabled)
+    
+    def remove_script_notifications(self, script_name: str) -> None:
+        """Remove per-script notification setting, falling back to global setting.
+        
+        Args:
+            script_name: The original script name (not display name)
+        """
+        key = f'script_notifications/{script_name}'
+        if self.settings.contains(key):
+            self.settings.remove(key)
+            self.settings.sync()
+            logger.debug(f"Removed per-script notification setting for: {script_name}")
+    
+    def get_all_script_notifications(self) -> Dict[str, bool]:
+        """Get all per-script notification settings.
+        
+        Returns:
+            Dictionary mapping script names to their notification preferences
+        """
+        result = {}
+        self.settings.beginGroup('script_notifications')
+        try:
+            for key in self.settings.allKeys():
+                value = self.settings.value(key)
+                # Convert string booleans to actual booleans
+                if isinstance(value, str):
+                    if value.lower() == 'true':
+                        value = True
+                    elif value.lower() == 'false':
+                        value = False
+                result[key] = value
+        finally:
+            self.settings.endGroup()
+        return result
     
     # Font settings
     def get_font_family(self) -> str:
