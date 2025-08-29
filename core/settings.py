@@ -36,10 +36,6 @@ class SettingsManager(QObject):
             # Custom display names will be stored as 'custom_names/OriginalName': 'CustomName'
             # This is just a placeholder for the schema
         },
-        'appearance': {
-            'font_family': 'System Default',
-            'font_size': 9
-        },
         'script_arguments': {
             # Script arguments will be stored as 'script_arguments/ScriptName/ArgName': 'value'
             # This is just a placeholder for the schema
@@ -204,19 +200,6 @@ class SettingsManager(QObject):
         finally:
             self.settings.endGroup()
         return result
-    
-    # Font settings
-    def get_font_family(self) -> str:
-        return self.get('appearance/font_family', 'System Default')
-    
-    def set_font_family(self, font_family: str) -> None:
-        self.set('appearance/font_family', font_family)
-    
-    def get_font_size(self) -> int:
-        return self.get('appearance/font_size', 9)
-    
-    def set_font_size(self, font_size: int) -> None:
-        self.set('appearance/font_size', font_size)
     
     # Custom display name methods
     def get_custom_name(self, original_name: str) -> Optional[str]:

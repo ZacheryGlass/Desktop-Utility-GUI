@@ -45,8 +45,6 @@ class TrayManager(QObject):
         
         # Create context menu
         self.context_menu = QMenu(parent)
-        # Apply initial menu styling (font will be updated via update_menu_font)
-        self._update_menu_font()
         self._setup_context_menu()
         
         # Connect signals
@@ -107,30 +105,12 @@ class TrayManager(QObject):
             if app:
                 self.tray_icon.setIcon(app.style().standardIcon(app.style().StandardPixmap.SP_ComputerIcon))
     
-    def _update_menu_font(self):
-        """Update menu font based on settings"""
-        try:
-            font_family = self.settings.get_font_family()
-            font_size = self.settings.get_font_size()
-            
-            font = self.context_menu.font()
-            if font_family and font_family != 'System Default':
-                font.setFamily(font_family)
-            font.setPointSize(font_size)
-            
-            self.context_menu.setFont(font)
-            logger.debug(f"Updated menu font: {font_family}, {font_size}pt")
-        except Exception as e:
-            logger.error(f"Error updating menu font: {e}")
     
     def _setup_context_menu(self):
         """Setup the basic context menu structure"""
         # Title (clickable to open settings)
-        title_action = QAction("Desktop Utilities", self)
+        title_action = QAction("Desktop Utilities ⚙️", self)
         title_action.triggered.connect(self.settings_requested.emit)
-        title_font = title_action.font()
-        title_font.setBold(True)
-        title_action.setFont(title_font)
         self.context_menu.addAction(title_action)
         
         self.context_menu.addSeparator()
@@ -204,7 +184,7 @@ class TrayManager(QObject):
         
         # Keep title and first separator
         for i, action in enumerate(actions):
-            if action.text() == "Desktop Utilities":
+            if action.text() == "Desktop Utilities ⚙️":
                 actions_to_keep.append(action)
                 # Also keep the separator right after title
                 if i + 1 < len(actions) and actions[i + 1].isSeparator():
@@ -297,7 +277,6 @@ class TrayManager(QObject):
     def _create_choice_submenu(self, script_info: ScriptInfo, display_name: str, display_text: str) -> QAction:
         """Create submenu for scripts with choice arguments"""
         submenu = QMenu(display_text, self.context_menu)
-        submenu.setFont(self.context_menu.font())
         
         arg_info = script_info.arguments[0]  # Single choice argument
         for choice in arg_info.choices:
@@ -340,7 +319,6 @@ class TrayManager(QObject):
         menu_title = display_name
         
         submenu = QMenu(menu_title, self.context_menu)
-        submenu.setFont(self.context_menu.font())
         
         # Add preset options
         for preset_name in presets.keys():
@@ -624,10 +602,6 @@ class TrayManager(QObject):
         if self.tray_icon.supportsMessages():
             self.tray_icon.showMessage(title, message, icon, 3000)
     
-    def update_font_settings(self):
-        """Update font settings for tray menu"""
-        self._update_menu_font()
-        logger.debug("Font settings updated for tray menu")
     
     def refresh_hotkeys(self):
         """Refresh hotkey registrations (called when hotkeys change)"""

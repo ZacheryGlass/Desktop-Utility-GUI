@@ -12,7 +12,6 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QCheckBox, QPushButton, QLabel, QTextEdit,
                              QDialogButtonBox, QMessageBox, QGroupBox)
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
 
 from core.script_analyzer import ScriptInfo, ArgumentInfo
 

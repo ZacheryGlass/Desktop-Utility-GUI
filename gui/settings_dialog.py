@@ -3,10 +3,9 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox,
                              QCheckBox, QComboBox, QLabel, QPushButton,
                              QDialogButtonBox, QMessageBox, QWidget, QTabWidget,
                              QTableWidget, QTableWidgetItem, QHeaderView,
-                             QAbstractItemView, QFontComboBox, QSpinBox, QFileDialog,
+                             QAbstractItemView, QFileDialog,
                              QInputDialog)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
 
 from core.settings import SettingsManager
 from core.startup_manager import StartupManager
@@ -208,31 +207,6 @@ class SettingsDialog(QDialog):
         behavior_group.setLayout(behavior_layout)
         layout.addWidget(behavior_group)
         
-        # Appearance Settings Group
-        appearance_group = QGroupBox("Appearance")
-        appearance_layout = QVBoxLayout()
-        
-        # Font family selection
-        font_layout = QHBoxLayout()
-        font_layout.addWidget(QLabel("Font Family:"))
-        self.font_combo = QFontComboBox()
-        self.font_combo.setToolTip("Select the font family for the application")
-        font_layout.addWidget(self.font_combo)
-        appearance_layout.addLayout(font_layout)
-        
-        # Font size selection
-        size_layout = QHBoxLayout()
-        size_layout.addWidget(QLabel("Font Size:"))
-        self.font_size_spinbox = QSpinBox()
-        self.font_size_spinbox.setRange(6, 24)
-        self.font_size_spinbox.setSuffix(" pt")
-        self.font_size_spinbox.setToolTip("Select the font size for the application")
-        size_layout.addWidget(self.font_size_spinbox)
-        size_layout.addStretch()  # Push spinbox to the left
-        appearance_layout.addLayout(size_layout)
-        
-        appearance_group.setLayout(appearance_layout)
-        layout.addWidget(appearance_group)
         
         # Add stretch to push content to top
         layout.addStretch()
@@ -249,9 +223,6 @@ class SettingsDialog(QDialog):
         self.single_instance_checkbox.stateChanged.connect(self._on_single_instance_changed)
         self.show_notifications_checkbox.stateChanged.connect(self._on_show_notifications_changed)
         
-        # Appearance settings
-        self.font_combo.currentTextChanged.connect(self._on_font_family_changed)
-        self.font_size_spinbox.valueChanged.connect(self._on_font_size_changed)
         
         # Handler for startup dependencies (enabling/disabling dependent controls)
         self.run_on_startup_checkbox.stateChanged.connect(self._on_startup_changed)
@@ -274,7 +245,7 @@ class SettingsDialog(QDialog):
         # Create table for script configuration
         self.scripts_table = QTableWidget()
         self.scripts_table.setColumnCount(4)
-        self.scripts_table.setHorizontalHeaderLabels(["Script", "Display Name", "Hotkey", "Notifications"])
+        self.scripts_table.setHorizontalHeaderLabels(["Script", "Display Name", "Hotkey", ""])
 
         # Table styling is handled by the global stylesheet
 
@@ -392,7 +363,6 @@ class SettingsDialog(QDialog):
         warning_text = QLabel(
             "This will permanently delete all application settings, including:\n"
             "• General preferences and startup settings\n"
-            "• Font and appearance settings\n"
             "• Script display names and hotkey assignments\n"
             "• External script configurations\n"
             "• Script presets and argument values\n"
@@ -428,7 +398,7 @@ class SettingsDialog(QDialog):
             self.run_on_startup_checkbox, self.start_minimized_checkbox,
             self.show_startup_notification, self.minimize_to_tray_checkbox,
             self.close_to_tray_checkbox, self.single_instance_checkbox,
-            self.show_notifications_checkbox, self.font_combo, self.font_size_spinbox
+            self.show_notifications_checkbox
         ]
         
         for control in controls_to_block:
@@ -446,11 +416,6 @@ class SettingsDialog(QDialog):
             self.single_instance_checkbox.setChecked(self.settings.get('behavior/single_instance', True))
             self.show_notifications_checkbox.setChecked(self.settings.should_show_notifications())
             
-            # Load appearance settings
-            font_family = self.settings.get_font_family()
-            if font_family != 'System Default':
-                self.font_combo.setCurrentText(font_family)
-            self.font_size_spinbox.setValue(self.settings.get_font_size())
         finally:
             # Re-enable signals
             for control in controls_to_block:
@@ -518,21 +483,6 @@ class SettingsDialog(QDialog):
         except Exception as e:
             logger.error(f"Error setting show notifications: {e}")
     
-    def _on_font_family_changed(self, font_family):
-        """Handle immediate saving of font family setting"""
-        try:
-            self.settings.set_font_family(font_family)
-            self.settings_changed.emit()
-        except Exception as e:
-            logger.error(f"Error setting font family: {e}")
-    
-    def _on_font_size_changed(self, font_size):
-        """Handle immediate saving of font size setting"""
-        try:
-            self.settings.set_font_size(font_size)
-            self.settings_changed.emit()
-        except Exception as e:
-            logger.error(f"Error setting font size: {e}")
     
     def _on_startup_changed(self, state):
         # Enable/disable "start minimized" when startup is toggled
@@ -1154,7 +1104,6 @@ class SettingsDialog(QDialog):
             "This will permanently delete ALL application settings and cannot be undone!\n\n"
             "This includes:\n"
             "• All preferences and startup settings\n"
-            "• Font and appearance settings\n"
             "• Script display names and hotkey assignments\n"
             "• External script configurations\n"
             "• Script presets and argument values\n"
