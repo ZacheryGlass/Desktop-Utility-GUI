@@ -152,6 +152,10 @@ class SettingsDialog(QDialog):
         self.presets_tab = self._create_presets_tab()
         self.tab_widget.addTab(self.presets_tab, "Script Args")
         
+        # Create and add Reset tab
+        self.reset_tab = self._create_reset_tab()
+        self.tab_widget.addTab(self.reset_tab, "💀")
+        
         # External script functionality is now integrated into Scripts tab
         
         # Dialog buttons
@@ -405,6 +409,74 @@ class SettingsDialog(QDialog):
         
         return widget
     
+    def _create_reset_tab(self) -> QWidget:
+        """Create the Reset Settings tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(20)
+        
+        # Warning section
+        warning_group = QGroupBox("⚠️ Danger Zone")
+        warning_layout = QVBoxLayout()
+        
+        warning_text = QLabel(
+            "This will permanently delete all application settings, including:\n"
+            "• General preferences and startup settings\n"
+            "• Font and appearance settings\n"
+            "• Script display names and hotkey assignments\n"
+            "• External script configurations\n"
+            "• Script presets and argument values\n"
+            "• Disabled script states\n\n"
+            "This action cannot be undone. The application will restart with default settings."
+        )
+        warning_text.setWordWrap(True)
+        warning_text.setStyleSheet("""
+            QLabel {
+                color: #ffaa00;
+                background-color: #2b2b2b;
+                padding: 12px;
+                border: 1px solid #555555;
+                border-radius: 4px;
+            }
+        """)
+        warning_layout.addWidget(warning_text)
+        
+        warning_group.setLayout(warning_layout)
+        layout.addWidget(warning_group)
+        
+        # Button section
+        button_section = QVBoxLayout()
+        
+        reset_button = QPushButton("💀 Reset All Settings 💀")
+        reset_button.setMinimumHeight(50)
+        reset_button.setStyleSheet("""
+            QPushButton {
+                background-color: #cc0000;
+                color: white;
+                font-weight: bold;
+                font-size: 14px;
+                border: 2px solid #ff0000;
+                border-radius: 6px;
+                padding: 8px;
+            }
+            QPushButton:hover {
+                background-color: #ff0000;
+                border-color: #ff3333;
+            }
+            QPushButton:pressed {
+                background-color: #990000;
+                border-color: #cc0000;
+            }
+        """)
+        reset_button.clicked.connect(self._reset_all_settings)
+        
+        button_section.addWidget(reset_button)
+        layout.addLayout(button_section)
+        
+        # Add stretch to push content to top
+        layout.addStretch()
+        
+        return widget
 
     def load_settings(self):
         # Block signals to prevent immediate-save handlers from firing during initialization
@@ -872,6 +944,56 @@ class SettingsDialog(QDialog):
                 self.settings.save_script_preset(script_name, new_preset_name, arguments)
                 self._on_preset_script_changed(self.presets_script_combo.currentText())
     
+    def _reset_all_settings(self):
+        """Reset all application settings to defaults"""
+        reply = QMessageBox.question(
+            self,
+            "Reset All Settings",
+            "⚠️ WARNING ⚠️\n\n"
+            "This will permanently delete ALL application settings and cannot be undone!\n\n"
+            "This includes:\n"
+            "• All preferences and startup settings\n"
+            "• Font and appearance settings\n"
+            "• Script display names and hotkey assignments\n"
+            "• External script configurations\n"
+            "• Script presets and argument values\n"
+            "• Disabled script states\n\n"
+            "The application will need to be restarted after reset.\n\n"
+            "Are you absolutely sure you want to continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                # Clear all settings
+                self.settings.settings.clear()
+                self.settings.settings.sync()
+                
+                QMessageBox.information(
+                    self,
+                    "Settings Reset Complete",
+                    "✅ All settings have been permanently deleted!\n\n"
+                    "The application will now close and you'll need to restart it.\n\n"
+                    "When you restart, all settings will be back to their defaults."
+                )
+                
+                # Close the dialog and signal to close the application
+                self.accept()
+                
+                # Exit the application
+                from PyQt6.QtWidgets import QApplication
+                QApplication.quit()
+                
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    f"Failed to reset settings: {str(e)}\n\n"
+                    "You may need to manually delete the registry entries at:\n"
+                    "HKEY_CURRENT_USER\\Software\\DesktopUtils\\DesktopUtilityGUI"
+                )
+    
     # External scripts management methods
     
     def _add_external_script(self):
@@ -976,11 +1098,6 @@ class SettingsDialog(QDialog):
         
         if reply == QMessageBox.StandardButton.Yes:
             self.settings.remove_external_script(script_name)
-            QMessageBox.information(
-                self,
-                "Script Removed",
-                f"External script '{script_name}' has been removed."
-            )
             # Refresh the scripts table to remove the external script
             if self.script_loader:
                 self.script_loader.refresh_external_scripts()
