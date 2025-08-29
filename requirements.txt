@@ -1,2 +1,6 @@
 PyQt6>=6.4.0
 pywin32>=305
+# OCR Screen Capture dependencies
+easyocr>=1.6.0
+Pillow>=9.0.0
+pyautogui>=0.9.50
