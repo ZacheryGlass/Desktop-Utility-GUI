@@ -319,7 +319,7 @@ class SettingsDialog(QDialog):
 
         # Refresh button
         refresh_button = QPushButton("Refresh Scripts")
-        refresh_button.clicked.connect(self._refresh_scripts_table)
+        refresh_button.clicked.connect(self._refresh_all_script_data)
         layout.addWidget(refresh_button)
 
         # Load scripts table
@@ -682,6 +682,13 @@ class SettingsDialog(QDialog):
         empty_item2.setForeground(Qt.GlobalColor.gray)
         self.scripts_table.setItem(row_position, 2, empty_item2)
         
+    def _refresh_all_script_data(self):
+        """Refresh all script-related data across all tabs for fluid updates"""
+        if self.script_loader:
+            self.script_loader.refresh_external_scripts()
+        self._refresh_scripts_table()
+        self._refresh_presets_script_combo()
+        self.scripts_changed.emit()
 
     def _on_script_cell_clicked(self, row: int, column: int):
         """Handle clicks on cells in the scripts table"""
@@ -719,6 +726,9 @@ class SettingsDialog(QDialog):
             
             # Refresh the table to show the updated state
             self._refresh_scripts_table()
+            
+            # Refresh the Script Args tab since script availability may have changed
+            self._refresh_presets_script_combo()
             
             # Emit signal to notify other components (like tray manager)
             self.scripts_changed.emit()
@@ -1043,6 +1053,9 @@ class SettingsDialog(QDialog):
                 self.script_loader.refresh_external_scripts()
             self._refresh_scripts_table()
             
+            # Refresh the Script Args tab to include new external script if it has arguments
+            self._refresh_presets_script_combo()
+            
             # Emit signal to notify other components (like tray manager)
             self.scripts_changed.emit()
         else:
@@ -1079,6 +1092,9 @@ class SettingsDialog(QDialog):
                 self.script_loader.refresh_external_scripts()
             self._refresh_scripts_table()
             
+            # Refresh the Script Args tab since script arguments may have changed
+            self._refresh_presets_script_combo()
+            
             # Emit signal to notify other components (like tray manager)
             self.scripts_changed.emit()
         else:
@@ -1102,6 +1118,9 @@ class SettingsDialog(QDialog):
             if self.script_loader:
                 self.script_loader.refresh_external_scripts()
             self._refresh_scripts_table()
+            
+            # Refresh the Script Args tab to ensure external script is removed from dropdown
+            self._refresh_presets_script_combo()
             
             # Emit signal to notify other components (like tray manager)
             self.scripts_changed.emit()
