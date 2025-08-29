@@ -53,18 +53,39 @@ def empty_recycle_bin():
         Write-Output "Success"
         '''
         
-        # Alternative method using COM object (more reliable)
+        # Use Clear-RecycleBin cmdlet with -Force to avoid confirmations
         ps_script_alt = '''
+        # First check if recycle bin has items
         $recycleBin = (New-Object -ComObject Shell.Application).NameSpace(0xA)
         $items = $recycleBin.Items()
         if ($items.Count -eq 0) {
             Write-Output "Already empty"
         } else {
             $itemCount = $items.Count
-            foreach ($item in $items) {
-                $item.InvokeVerb("delete")
+            # Use Clear-RecycleBin with -Force to avoid individual confirmations
+            try {
+                Clear-RecycleBin -Force -ErrorAction Stop
+                Write-Output "Emptied $itemCount items"
+            } catch {
+                # Fallback to SHEmptyRecycleBin API
+                Add-Type @'
+                using System;
+                using System.Runtime.InteropServices;
+                public class RecycleBin {
+                    [DllImport("shell32.dll")]
+                    public static extern int SHEmptyRecycleBin(IntPtr hwnd, string pszRootPath, uint dwFlags);
+                    public const uint SHERB_NOCONFIRMATION = 0x00000001;
+                    public const uint SHERB_NOPROGRESSUI = 0x00000002;
+                    public const uint SHERB_NOSOUND = 0x00000004;
+                }
+'@
+                $result = [RecycleBin]::SHEmptyRecycleBin([IntPtr]::Zero, $null, 0x00000007)
+                if ($result -eq 0) {
+                    Write-Output "Emptied $itemCount items"
+                } else {
+                    throw "SHEmptyRecycleBin failed with code: $result"
+                }
             }
-            Write-Output "Emptied $itemCount items"
         }
         '''
         
