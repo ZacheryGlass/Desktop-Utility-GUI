@@ -30,21 +30,7 @@ class HotkeyRecorder(QLineEdit):
         super().__init__(parent)
         self.setReadOnly(True)
         self.setPlaceholderText("Click here and press a key combination...")
-        self.setStyleSheet("""
-            QLineEdit {
-                padding: 8px;
-                font-size: 14px;
-                border: 2px solid #ccc;
-                border-radius: 4px;
-                background-color: #f9f9f9;
-                color: #000;
-            }
-            QLineEdit:focus {
-                border-color: #0078d4;
-                background-color: #fff;
-                color: #000;
-            }
-        """)
+        # Use global stylesheet instead of inline styling
         
         self.current_modifiers: Set[str] = set()
         self.current_key: Optional[str] = None
@@ -188,35 +174,12 @@ class HotkeyRecorder(QLineEdit):
         self.current_key = None
         self.setText("Press a key combination...")
         self.setFocus()
-        self.setStyleSheet("""
-            QLineEdit {
-                padding: 8px;
-                font-size: 14px;
-                border: 2px solid #0078d4;
-                border-radius: 4px;
-                background-color: #e6f2ff;
-                color: #000;
-            }
-        """)
+        self.setProperty("class", "recording")
     
     def stop_recording(self):
         """Stop recording key combinations"""
         self.recording = False
-        self.setStyleSheet("""
-            QLineEdit {
-                padding: 8px;
-                font-size: 14px;
-                border: 2px solid #ccc;
-                border-radius: 4px;
-                background-color: #f9f9f9;
-                color: #000;
-            }
-            QLineEdit:focus {
-                border-color: #0078d4;
-                background-color: #fff;
-                color: #000;
-            }
-        """)
+        self.setProperty("class", "")
     
     def mousePressEvent(self, event):
         """Handle mouse clicks to start recording"""
@@ -285,7 +248,7 @@ class HotkeyConfigDialog(QDialog):
             "Use Ctrl, Alt, Shift, or Win as modifiers."
         )
         instructions.setWordWrap(True)
-        instructions.setStyleSheet("color: #666; font-size: 12px;")
+        instructions.setProperty("class", "secondary")
         layout.addWidget(instructions)
         
         # Hotkey recorder
@@ -297,7 +260,7 @@ class HotkeyConfigDialog(QDialog):
         
         # Validation label
         self.validation_label = QLabel("")
-        self.validation_label.setStyleSheet("color: red; font-size: 12px;")
+        self.validation_label.setProperty("class", "error-text")
         self.validation_label.setVisible(False)
         layout.addWidget(self.validation_label)
         
@@ -355,7 +318,7 @@ class HotkeyConfigDialog(QDialog):
         
         if self.new_hotkey in system_hotkeys:
             self.validation_label.setText("This hotkey is reserved by the system")
-            self.validation_label.setStyleSheet("color: orange; font-size: 12px;")
+            self.validation_label.setProperty("class", "warning-text")
             self.validation_label.setVisible(True)
             # Allow but warn
             return True

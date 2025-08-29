@@ -28,14 +28,17 @@ class ScriptNameWidget(QWidget):
         self.script_name = script_name
         self.is_external = is_external
         self.is_disabled = is_disabled
+        self.setProperty("class", "ScriptNameWidget")
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setContentsMargins(2, 0, 2, 0)
         layout.setSpacing(8)
         
         # Script name label
         self.name_label = QLabel(script_name)
-        self.name_label.setStyleSheet("color: white;")
+        # Set text color directly to ensure visibility
+        from PyQt6.QtGui import QPalette
+        self.name_label.setStyleSheet("color: #F0F0F5; background-color: transparent;")
         layout.addWidget(self.name_label)
         
         # Spacer to push button to the right
@@ -45,21 +48,7 @@ class ScriptNameWidget(QWidget):
         self.action_button = QPushButton()
         self.action_button.setMaximumSize(20, 20)
         self.action_button.setMinimumSize(20, 20)
-        self.action_button.setStyleSheet("""
-            QPushButton {
-                background-color: #555555;
-                border: 1px solid #777777;
-                color: white;
-                font-weight: bold;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #666666;
-            }
-            QPushButton:pressed {
-                background-color: #444444;
-            }
-        """)
+        self.action_button.setProperty("class", "action-button")
         
         self.update_button_state()
         layout.addWidget(self.action_button)
@@ -74,12 +63,12 @@ class ScriptNameWidget(QWidget):
             # Disabled native scripts show "+" for enabling
             self.action_button.setText("+")
             self.action_button.setToolTip("Enable script")
-            self.name_label.setStyleSheet("color: #888888;")  # Gray out disabled scripts
+            self.name_label.setStyleSheet("color: #6E6F78; background-color: transparent;")
         else:
             # Enabled native scripts show "-" for disabling  
             self.action_button.setText("-")
             self.action_button.setToolTip("Disable script")
-            self.name_label.setStyleSheet("color: white;")
+            self.name_label.setStyleSheet("color: #F0F0F5; background-color: transparent;")
     
     def set_disabled_state(self, disabled: bool):
         """Update the disabled state and refresh the UI"""
@@ -92,14 +81,16 @@ class AddNewScriptWidget(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setProperty("class", "AddNewScriptWidget")
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setContentsMargins(2, 0, 2, 0)
         layout.setSpacing(8)
         
         # "Add New Script..." label
         self.label = QLabel("+ Add New Script...")
-        self.label.setStyleSheet("color: cyan; font-style: italic;")
+        # Set text color directly to ensure visibility
+        self.label.setStyleSheet("color: #00FFFF; font-style: italic; background-color: transparent;")
         self.label.setToolTip("Click to add an external Python script")
         layout.addWidget(self.label)
         
@@ -154,12 +145,16 @@ class SettingsDialog(QDialog):
         
         # Create and add Reset tab
         self.reset_tab = self._create_reset_tab()
-        self.tab_widget.addTab(self.reset_tab, "💀")
+        self.tab_widget.addTab(self.reset_tab, "Reset")
         
         # External script functionality is now integrated into Scripts tab
         
         # Dialog buttons
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        
+        # Set primary button styling
+        ok_button = button_box.button(QDialogButtonBox.StandardButton.Ok)
+        ok_button.setObjectName("primaryButton")
         
         button_box.accepted.connect(self.accept)
         
@@ -206,8 +201,8 @@ class SettingsDialog(QDialog):
         self.single_instance_checkbox.setToolTip("Prevent multiple instances of the application")
         behavior_layout.addWidget(self.single_instance_checkbox)
         
-        self.show_notifications_checkbox = QCheckBox("Show script execution notifications")
-        self.show_notifications_checkbox.setToolTip("Display notifications when scripts are executed")
+        self.show_notifications_checkbox = QCheckBox("Show script notifications (default for new scripts)")
+        self.show_notifications_checkbox.setToolTip("Default notification setting for new scripts. Individual scripts can override this in the Scripts tab.")
         behavior_layout.addWidget(self.show_notifications_checkbox)
         
         behavior_group.setLayout(behavior_layout)
@@ -278,39 +273,25 @@ class SettingsDialog(QDialog):
 
         # Create table for script configuration
         self.scripts_table = QTableWidget()
-        self.scripts_table.setColumnCount(3)
-        self.scripts_table.setHorizontalHeaderLabels(["Script", "Display Name", "Hotkey"])
+        self.scripts_table.setColumnCount(4)
+        self.scripts_table.setHorizontalHeaderLabels(["Script", "Display Name", "Hotkey", "Notifications"])
 
-        # Set table styling
-        self.scripts_table.setStyleSheet("""
-            QTableWidget {
-                background-color: #2b2b2b;
-                alternate-background-color: #3c3c3c;
-                gridline-color: #555555;
-                color: #ffffff;
-            }
-            QTableWidget::item {
-                padding: 4px;
-                color: #ffffff;
-            }
-            QTableWidget::item:selected {
-                background-color: #0078d4;
-            }
-            QHeaderView::section {
-                background-color: #404040;
-                color: #ffffff;
-                padding: 4px;
-                border: 1px solid #555555;
-            }
-        """)
+        # Table styling is handled by the global stylesheet
 
         # Configure table
         self.scripts_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.scripts_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.scripts_table.horizontalHeader().setStretchLastSection(True)
+        self.scripts_table.horizontalHeader().setStretchLastSection(False)
         self.scripts_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.scripts_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.scripts_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.scripts_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        
+        # Set fixed width for notifications column (just wide enough for emoji)
+        self.scripts_table.setColumnWidth(3, 50)
+        
+        # Set default row height programmatically to ensure it takes effect immediately
+        self.scripts_table.verticalHeader().setDefaultSectionSize(35)
 
         # Connect cell click and context menu handlers
         self.scripts_table.cellClicked.connect(self._on_script_cell_clicked)
@@ -356,33 +337,15 @@ class SettingsDialog(QDialog):
         self.presets_table.setColumnCount(2)
         self.presets_table.setHorizontalHeaderLabels(["Preset Name", "Arguments"])
         
-        # Set table styling
-        self.presets_table.setStyleSheet("""
-            QTableWidget {
-                background-color: #2b2b2b;
-                alternate-background-color: #3c3c3c;
-                gridline-color: #555555;
-                color: #ffffff;
-            }
-            QTableWidget::item {
-                padding: 4px;
-                color: #ffffff;
-            }
-            QTableWidget::item:selected {
-                background-color: #0078d4;
-            }
-            QHeaderView::section {
-                background-color: #404040;
-                color: #ffffff;
-                padding: 4px;
-                border: 1px solid #555555;
-            }
-        """)
+        # Table styling is handled by the global stylesheet
         
         # Configure table
         self.presets_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.presets_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.presets_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        
+        # Set default row height programmatically
+        self.presets_table.verticalHeader().setDefaultSectionSize(30)
         
         layout.addWidget(self.presets_table)
         
@@ -416,7 +379,8 @@ class SettingsDialog(QDialog):
         layout.setSpacing(20)
         
         # Warning section
-        warning_group = QGroupBox("⚠️ Danger Zone")
+        warning_group = QGroupBox("Danger Zone")
+        warning_group.setObjectName("dangerZone")
         warning_layout = QVBoxLayout()
         
         warning_text = QLabel(
@@ -430,15 +394,7 @@ class SettingsDialog(QDialog):
             "This action cannot be undone. The application will restart with default settings."
         )
         warning_text.setWordWrap(True)
-        warning_text.setStyleSheet("""
-            QLabel {
-                color: #ffaa00;
-                background-color: #2b2b2b;
-                padding: 12px;
-                border: 1px solid #555555;
-                border-radius: 4px;
-            }
-        """)
+        warning_text.setProperty("class", "warning-text")
         warning_layout.addWidget(warning_text)
         
         warning_group.setLayout(warning_layout)
@@ -447,27 +403,9 @@ class SettingsDialog(QDialog):
         # Button section
         button_section = QVBoxLayout()
         
-        reset_button = QPushButton("💀 Reset All Settings 💀")
+        reset_button = QPushButton("Reset All Settings")
+        reset_button.setObjectName("destructiveButton")
         reset_button.setMinimumHeight(50)
-        reset_button.setStyleSheet("""
-            QPushButton {
-                background-color: #cc0000;
-                color: white;
-                font-weight: bold;
-                font-size: 14px;
-                border: 2px solid #ff0000;
-                border-radius: 6px;
-                padding: 8px;
-            }
-            QPushButton:hover {
-                background-color: #ff0000;
-                border-color: #ff3333;
-            }
-            QPushButton:pressed {
-                background-color: #990000;
-                border-color: #cc0000;
-            }
-        """)
         reset_button.clicked.connect(self._reset_all_settings)
         
         button_section.addWidget(reset_button)
@@ -660,6 +598,24 @@ class SettingsDialog(QDialog):
                 else:
                     hotkey_item.setForeground(Qt.GlobalColor.white if hotkey else Qt.GlobalColor.gray)
                 self.scripts_table.setItem(row_position, 2, hotkey_item)
+
+                # Notifications
+                notifications_enabled = self.settings.should_show_script_notifications(original_name)
+                notifications_emoji = "🔔" if notifications_enabled else "🔕"
+                notifications_item = QTableWidgetItem(notifications_emoji)
+                notifications_item.setData(Qt.ItemDataRole.UserRole, script_info)  # Store script_info for click handling
+                notifications_item.setToolTip("Click to toggle notifications for this script")
+                
+                # Set text alignment to center the emoji
+                notifications_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                
+                # Apply styling based on script state
+                if is_disabled:
+                    notifications_item.setForeground(Qt.GlobalColor.gray)
+                else:
+                    notifications_item.setForeground(Qt.GlobalColor.white)
+                
+                self.scripts_table.setItem(row_position, 3, notifications_item)
                 
 
             except Exception as e:
@@ -681,6 +637,10 @@ class SettingsDialog(QDialog):
         empty_item2 = QTableWidgetItem("")
         empty_item2.setForeground(Qt.GlobalColor.gray)
         self.scripts_table.setItem(row_position, 2, empty_item2)
+        
+        empty_item3 = QTableWidgetItem("")
+        empty_item3.setForeground(Qt.GlobalColor.gray)
+        self.scripts_table.setItem(row_position, 3, empty_item3)
         
     def _refresh_all_script_data(self):
         """Refresh all script-related data across all tabs for fluid updates"""
@@ -713,6 +673,8 @@ class SettingsDialog(QDialog):
             self._edit_display_name(row, original_name)
         elif column == 2:  # Hotkey
             self._edit_hotkey(row, original_name)
+        elif column == 3:  # Notifications
+            self._toggle_notifications(row, original_name)
     
     def _on_script_action_button_clicked(self, script_name: str, is_external: bool):
         """Handle +/- button clicks with different logic for native vs external scripts"""
@@ -818,6 +780,44 @@ class SettingsDialog(QDialog):
                     hotkey_item.setForeground(Qt.GlobalColor.white if new_hotkey else Qt.GlobalColor.gray)
                 
                 self.hotkeys_changed.emit()
+    
+    def _toggle_notifications(self, row: int, script_name: str):
+        """Handle toggling of notifications for a script"""
+        try:
+            # Get current notification state
+            current_enabled = self.settings.should_show_script_notifications(script_name)
+            
+            # Check if this script has a per-script setting or uses global
+            per_script_notifications = self.settings.get_all_script_notifications()
+            has_per_script_setting = script_name in per_script_notifications
+            
+            if has_per_script_setting:
+                # Toggle the per-script setting
+                new_enabled = not current_enabled
+                self.settings.set_script_notifications(script_name, new_enabled)
+            else:
+                # First time setting per-script notification - set opposite of global
+                global_enabled = self.settings.should_show_notifications()
+                new_enabled = not global_enabled
+                self.settings.set_script_notifications(script_name, new_enabled)
+            
+            # Update the table cell
+            notifications_item = self.scripts_table.item(row, 3)
+            if notifications_item:
+                # Update the emoji
+                new_emoji = "🔔" if new_enabled else "🔕"
+                notifications_item.setText(new_emoji)
+            
+            logger.info(f"Toggled notifications for script '{script_name}' to: {new_enabled}")
+            
+        except Exception as e:
+            logger.error(f"Error toggling notifications for script {script_name}: {e}")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Failed to toggle notifications for script '{script_name}': {str(e)}"
+            )
     
     # Preset management methods
     def _refresh_presets_script_combo(self):
