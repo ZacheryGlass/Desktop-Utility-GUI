@@ -63,7 +63,13 @@ class TrayManager(QObject):
         self.refresh_timer.start(refresh_interval)
         
         # Start hotkey manager
-        self.hotkey_manager.start()
+        if not self.hotkey_manager.start():
+            logger.warning("Hotkey manager failed to start - hotkeys will not work")
+            self.show_notification(
+                "Hotkey System Warning",
+                "Failed to initialize hotkey system. Global hotkeys will not work.",
+                QSystemTrayIcon.MessageIcon.Warning
+            )
         
         logger.info("TrayManager initialized")
     
@@ -595,6 +601,13 @@ class TrayManager(QObject):
     def _on_hotkey_registration_failed(self, script_name: str, hotkey: str, error: str):
         """Handle hotkey registration failure"""
         logger.warning(f"Failed to register hotkey {hotkey} for {script_name}: {error}")
+        
+        # Show notification to user about hotkey registration failure
+        self.show_notification(
+            f"Hotkey Registration Failed",
+            f"Failed to register {hotkey} for '{script_name}': {error}",
+            QSystemTrayIcon.MessageIcon.Warning
+        )
     
     def _on_tray_activated(self, reason):
         """Handle tray icon activation"""
@@ -620,6 +633,48 @@ class TrayManager(QObject):
         """Refresh hotkey registrations (called when hotkeys change)"""
         logger.debug("Refreshing hotkeys...")
         self._register_hotkeys()
+    
+    def validate_hotkey_status(self):
+        """Validate and report on hotkey registration status"""
+        logger.info("Validating hotkey registration status...")
+        status_info = self.hotkey_manager.validate_registration_status()
+        
+        if not status_info:
+            self.show_notification(
+                "Hotkey Status",
+                "No hotkeys are currently configured.",
+                QSystemTrayIcon.MessageIcon.Information
+            )
+            return
+        
+        # Count working vs failed hotkeys
+        working = sum(1 for info in status_info.values() if info['registered'])
+        failed = len(status_info) - working
+        
+        if failed == 0:
+            self.show_notification(
+                "Hotkey Status - All Good",
+                f"All {working} configured hotkeys are working correctly.",
+                QSystemTrayIcon.MessageIcon.Information
+            )
+        else:
+            # Show details about failed hotkeys
+            failed_details = []
+            for script_name, info in status_info.items():
+                if not info['registered']:
+                    failed_details.append(f"• {script_name} ({info['hotkey']}): {info['error']}")
+            
+            message = f"{failed} of {len(status_info)} hotkeys failed to register:\n\n" + "\n".join(failed_details[:3])
+            if len(failed_details) > 3:
+                message += f"\n... and {len(failed_details) - 3} more"
+            
+            self.show_notification(
+                "Hotkey Status - Issues Found",
+                message,
+                QSystemTrayIcon.MessageIcon.Warning
+            )
+        
+        logger.info(f"Hotkey validation complete: {working} working, {failed} failed")
     
     def cleanup(self):
         """Cleanup resources"""

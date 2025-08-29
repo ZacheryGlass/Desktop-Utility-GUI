@@ -77,25 +77,42 @@ class HotkeyWidget(QWidget):
     
     def __init__(self):
         super().__init__()
+        self.hwnd = None
         
-        # Set window flags to make it invisible and not interfere with other windows
-        from PyQt6.QtCore import Qt
-        self.setWindowFlags(
-            Qt.WindowType.Tool | 
-            Qt.WindowType.FramelessWindowHint | 
-            Qt.WindowType.WindowStaysOnBottomHint
-        )
-        
-        # Hide the widget and make it very small
-        self.hide()
-        self.resize(1, 1)
-        
-        # Ensure the widget is created and get the window handle
-        self.show()  # Briefly show to create the window
-        self.hwnd = int(self.winId())
-        self.hide()  # Hide it again
-        
-        logger.info(f"Hotkey widget created with hwnd: {self.hwnd}")
+        try:
+            # Set window flags to make it invisible and not interfere with other windows
+            from PyQt6.QtCore import Qt
+            self.setWindowFlags(
+                Qt.WindowType.Tool | 
+                Qt.WindowType.FramelessWindowHint | 
+                Qt.WindowType.WindowStaysOnBottomHint
+            )
+            
+            # Hide the widget and make it very small
+            self.hide()
+            self.resize(1, 1)
+            
+            # Ensure the widget is created and get the window handle
+            logger.debug("Creating hotkey widget window handle...")
+            self.show()  # Briefly show to create the window
+            
+            # Get window ID and verify it's valid
+            win_id = self.winId()
+            if win_id == 0:
+                raise RuntimeError("Failed to create widget window - winId() returned 0")
+            
+            self.hwnd = int(win_id)
+            self.hide()  # Hide it again
+            
+            if self.hwnd <= 0:
+                raise RuntimeError(f"Invalid window handle: {self.hwnd}")
+            
+            logger.info(f"Hotkey widget created successfully with hwnd: {self.hwnd}")
+            
+        except Exception as e:
+            logger.error(f"Failed to create HotkeyWidget: {e}")
+            self.hwnd = None
+            raise
     
     def nativeEvent(self, eventType, message):
         """Handle native Windows events"""
@@ -123,7 +140,7 @@ class HotkeyManager(QObject):
     """Manages global hotkey registration and handling"""
     
     hotkey_triggered = pyqtSignal(str, str)  # script_name, hotkey_string
-    registration_failed = pyqtSignal(str, str)  # hotkey_string, error_message
+    registration_failed = pyqtSignal(str, str, str)  # script_name, hotkey_string, error_message
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -137,11 +154,27 @@ class HotkeyManager(QObject):
     def start(self):
         """Start the hotkey system by creating the widget in main thread"""
         if self.widget is None:
-            self.widget = HotkeyWidget()
-            self.widget.hotkey_triggered.connect(self._on_hotkey_triggered)
-            logger.info("HotkeyManager started")
+            try:
+                logger.info("Starting HotkeyManager - creating HotkeyWidget...")
+                self.widget = HotkeyWidget()
+                
+                # Verify widget was created successfully
+                if not hasattr(self.widget, 'hwnd') or not self.widget.hwnd:
+                    logger.error("HotkeyWidget failed to create window handle")
+                    self.widget = None
+                    return False
+                
+                self.widget.hotkey_triggered.connect(self._on_hotkey_triggered)
+                logger.info(f"HotkeyManager started successfully with widget HWND: {self.widget.hwnd}")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Failed to start HotkeyManager: {e}")
+                self.widget = None
+                return False
         else:
             logger.debug("HotkeyManager already started")
+            return True
     
     def stop(self):
         """Stop the hotkey system and unregister all hotkeys"""
@@ -286,7 +319,7 @@ class HotkeyManager(QObject):
         if not self.is_hotkey_available(normalized):
             error_msg = f"Hotkey {normalized} is already registered or reserved"
             logger.warning(error_msg)
-            self.registration_failed.emit(normalized, error_msg)
+            self.registration_failed.emit(script_name, normalized, error_msg)
             return False
         
         # Parse the hotkey string
@@ -294,14 +327,14 @@ class HotkeyManager(QObject):
         if modifiers == 0 and vk_code == 0:
             error_msg = f"Invalid hotkey format: {hotkey_string}"
             logger.error(error_msg)
-            self.registration_failed.emit(hotkey_string, error_msg)
+            self.registration_failed.emit(script_name, hotkey_string, error_msg)
             return False
         
         # Make sure widget is created
         if not self.widget:
             error_msg = "Hotkey system not started"
             logger.error(error_msg)
-            self.registration_failed.emit(normalized, error_msg)
+            self.registration_failed.emit(script_name, normalized, error_msg)
             return False
             
         hotkey_id = self.next_id
@@ -322,7 +355,7 @@ class HotkeyManager(QObject):
                 else:
                     error_msg = f"Failed to register hotkey {normalized}: Windows error {error_code}"
                 logger.error(error_msg)
-                self.registration_failed.emit(normalized, error_msg)
+                self.registration_failed.emit(script_name, normalized, error_msg)
                 return False
             
             # Registration successful
@@ -334,7 +367,7 @@ class HotkeyManager(QObject):
         except Exception as e:
             error_msg = f"Exception registering hotkey {normalized}: {str(e)}"
             logger.error(error_msg)
-            self.registration_failed.emit(normalized, error_msg)
+            self.registration_failed.emit(script_name, normalized, error_msg)
             return False
     
     def unregister_hotkey(self, script_name: str) -> bool:
@@ -423,3 +456,91 @@ class HotkeyManager(QObject):
             return False, "This hotkey is already registered"
         
         return True, ""
+    
+    def validate_registration_status(self) -> Dict[str, Dict[str, any]]:
+        """
+        Validate that all registered hotkeys are actually working with Windows
+        
+        Returns: Dict mapping script_name to status info:
+        {
+            'script_name': {
+                'hotkey': 'Ctrl+Alt+X',
+                'registered': True/False,
+                'error': 'error message if any'
+            }
+        }
+        """
+        status_info = {}
+        
+        if not self.widget or not self.widget.hwnd:
+            # If widget is not available, all hotkeys are effectively broken
+            for script_name, hotkey_string in self.get_registered_hotkeys().items():
+                status_info[script_name] = {
+                    'hotkey': hotkey_string,
+                    'registered': False,
+                    'error': 'Hotkey widget not available'
+                }
+            return status_info
+        
+        # Check each registered hotkey
+        for script_name, hotkey_string in self.get_registered_hotkeys().items():
+            try:
+                # Parse the hotkey to get modifiers and vk_code
+                modifiers, vk_code = self.parse_hotkey_string(hotkey_string)
+                
+                if modifiers == 0 and vk_code == 0:
+                    status_info[script_name] = {
+                        'hotkey': hotkey_string,
+                        'registered': False,
+                        'error': 'Invalid hotkey format'
+                    }
+                    continue
+                
+                # Try to register the hotkey temporarily to see if it's available
+                # We use a high ID number to avoid conflicts with our actual hotkeys
+                test_id = 99999
+                try:
+                    result = win32gui.RegisterHotKey(
+                        self.widget.hwnd, test_id, modifiers, vk_code
+                    )
+                    
+                    if result == 0:
+                        # Registration failed - hotkey is likely taken by another app
+                        import win32api
+                        error_code = win32api.GetLastError()
+                        if error_code == 1409:  # ERROR_HOTKEY_ALREADY_REGISTERED
+                            error_msg = "Hotkey is registered by another application"
+                        else:
+                            error_msg = f"Windows error {error_code}"
+                        
+                        status_info[script_name] = {
+                            'hotkey': hotkey_string,
+                            'registered': False,
+                            'error': error_msg
+                        }
+                    else:
+                        # Registration succeeded, so the hotkey should be available
+                        # Immediately unregister our test
+                        win32gui.UnregisterHotKey(self.widget.hwnd, test_id)
+                        
+                        status_info[script_name] = {
+                            'hotkey': hotkey_string,
+                            'registered': True,
+                            'error': None
+                        }
+                        
+                except Exception as e:
+                    status_info[script_name] = {
+                        'hotkey': hotkey_string,
+                        'registered': False,
+                        'error': f'Validation failed: {str(e)}'
+                    }
+                    
+            except Exception as e:
+                status_info[script_name] = {
+                    'hotkey': hotkey_string,
+                    'registered': False,
+                    'error': f'Error validating hotkey: {str(e)}'
+                }
+        
+        return status_info
