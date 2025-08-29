@@ -47,7 +47,9 @@ class MainWindow(QMainWindow):
         
         # Prevent recursive calls - check if dialog is already visible
         if self.settings_dialog.isVisible():
-            logger.warning("Settings dialog is already open, ignoring request")
+            logger.info("Settings dialog is already open, bringing to front")
+            self.settings_dialog.raise_()
+            self.settings_dialog.activateWindow()
             return
         
         self.settings_dialog.load_settings()  # Reload current settings
