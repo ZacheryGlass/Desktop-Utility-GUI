@@ -5,7 +5,7 @@ This controller handles tray icon behavior, menu updates, and coordinates
 between tray-related models and the tray view.
 """
 import logging
-from typing import List, Dict, Any
+from typing import Dict, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from models.system_models import TrayIconModel, NotificationModel
@@ -31,7 +31,7 @@ class TrayController(QObject):
     settings_dialog_requested = pyqtSignal()
     application_exit_requested = pyqtSignal()
     
-    def __init__(self, tray_model: TrayIconModel, 
+    def __init__(self, tray_model: TrayIconModel,
                  notification_model: NotificationModel,
                  script_controller: ScriptController):
         super().__init__()
@@ -68,24 +68,16 @@ class TrayController(QObject):
         logger.debug("Updating tray menu...")
         
         try:
-            # Get current scripts
             available_scripts = self._script_controller.get_available_scripts()
-            
-            # Build menu structure
             menu_structure = self._build_menu_structure(available_scripts)
-            
-            # Emit update signal
             self.menu_structure_updated.emit(menu_structure)
-            
             logger.debug(f"Menu updated with {len(available_scripts)} scripts")
-            
         except Exception as e:
             logger.error(f"Error updating menu: {e}")
     
     def _build_menu_structure(self, scripts) -> Dict[str, Any]:
         """Build the menu structure data for the view"""
         menu_items = []
-        
         if not scripts:
             menu_items.append({
                 'type': 'action',
@@ -96,36 +88,24 @@ class TrayController(QObject):
         else:
             for script_info in scripts:
                 script_name = script_info.display_name
-                
-                # Get script status
                 status = self._script_controller.get_script_status(script_name)
-                
-                # Get hotkey if assigned
                 hotkey = self._script_controller.get_script_hotkey(script_name)
-                
-                # Build menu item based on script configuration
-                menu_item = self._build_script_menu_item(script_info, status, hotkey)
-                menu_items.append(menu_item)
-        
+                menu_items.append(self._build_script_menu_item(script_info, status, hotkey))
         return {
-            'title': 'Desktop Utilities ⚙️',
+            'title': 'Desktop Utilities',
             'items': menu_items
         }
     
     def _build_script_menu_item(self, script_info, status: str, hotkey: str = None) -> Dict[str, Any]:
         """Build a menu item for a specific script"""
         script_name = script_info.display_name
-        
-        # Build display text
         display_text = script_name
         if status and status != "Ready":
             display_text += f" [{status}]"
         if hotkey:
             display_text += f" ({hotkey})"
         
-        # Determine menu item type based on script configuration
         if script_info.arguments:
-            # Script has arguments - check for presets or choices
             if self._has_choice_arguments(script_info):
                 return self._build_choice_submenu_item(script_info, display_text)
             elif self._has_preset_configuration(script_name):
@@ -133,7 +113,7 @@ class TrayController(QObject):
             else:
                 return {
                     'type': 'action',
-                    'text': f"⚠️ {display_text} (needs config)",
+                    'text': f"{display_text} (needs config)",
                     'enabled': True,
                     'data': {
                         'action': 'configure_script',
@@ -142,7 +122,6 @@ class TrayController(QObject):
                     }
                 }
         else:
-            # Simple script - direct execution
             return {
                 'type': 'action',
                 'text': display_text,
@@ -158,9 +137,8 @@ class TrayController(QObject):
         """Build submenu for script with choice arguments"""
         # Assume single choice argument for now
         arg_info = script_info.arguments[0]
-        
         submenu_items = []
-        for choice in arg_info.choices:
+        for choice in getattr(arg_info, 'choices', []) or []:
             submenu_items.append({
                 'type': 'action',
                 'text': choice,
@@ -173,7 +151,6 @@ class TrayController(QObject):
                     'script_info': script_info
                 }
             })
-        
         return {
             'type': 'submenu',
             'text': display_text,
@@ -183,8 +160,7 @@ class TrayController(QObject):
     
     def _build_preset_submenu_item(self, script_info, display_text: str) -> Dict[str, Any]:
         """Build submenu for script with presets"""
-        # This would get presets from settings
-        # For now, return simple action
+        # Placeholder: integrate with presets in settings when available
         return {
             'type': 'action',
             'text': display_text,
@@ -200,11 +176,11 @@ class TrayController(QObject):
         """Check if script has choice-based arguments"""
         if not script_info.arguments:
             return False
-        return any(arg.choices for arg in script_info.arguments)
+        return any(getattr(arg, 'choices', None) for arg in script_info.arguments)
     
     def _has_preset_configuration(self, script_name: str) -> bool:
         """Check if script has preset configurations"""
-        # This would check settings for presets
+        # TODO: Integrate with settings presets when available
         return False
     
     # User interaction handlers (called by views)
@@ -212,30 +188,21 @@ class TrayController(QObject):
         """Handle a menu action triggered by the user"""
         if not action_data:
             return
-        
         action = action_data.get('action')
         script_name = action_data.get('script_name')
-        
         logger.info(f"Handling menu action: {action} for script: {script_name}")
-        
         if action == 'execute_script':
             self._script_controller.execute_script(script_name)
-        
         elif action == 'execute_script_with_choice':
             arg_name = action_data.get('arg_name')
             choice = action_data.get('choice')
             self._script_controller.execute_script_with_choice(script_name, arg_name, choice)
-        
         elif action == 'execute_script_with_preset':
             preset_name = action_data.get('preset_name')
             self._script_controller.execute_script_with_preset(script_name, preset_name)
-        
         elif action == 'configure_script':
-            # This would trigger script configuration dialog
             logger.info(f"Script configuration requested for: {script_name}")
-            # For now, just show settings
             self.settings_dialog_requested.emit()
-        
         else:
             logger.warning(f"Unknown menu action: {action}")
     
@@ -262,16 +229,10 @@ class TrayController(QObject):
     def _setup_model_connections(self):
         """Set up connections to model signals"""
         logger.debug("Setting up tray controller model connections...")
-        
-        # Connect tray model signals
         self._tray_model.menu_update_requested.connect(self.update_menu)
         self._tray_model.notification_requested.connect(self.notification_display_requested.emit)
-        
-        # Connect notification model signals
         self._notification_model.notification_shown.connect(self.notification_display_requested.emit)
-        
-        # Connect script controller signals for menu updates
         self._script_controller.script_list_updated.connect(lambda scripts: self.update_menu())
         self._script_controller.script_status_updated.connect(lambda name, status: self.update_menu())
-        
         logger.debug("Tray controller model connections setup complete")
+

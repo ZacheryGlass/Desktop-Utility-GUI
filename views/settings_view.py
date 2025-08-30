@@ -50,7 +50,7 @@ class SettingsView(QDialog):
     script_toggled = pyqtSignal(str, bool)  # script_name, enabled
     hotkey_configuration_requested = pyqtSignal(str)  # script_name
     custom_name_changed = pyqtSignal(str, str)  # script_name, custom_name
-    external_script_add_requested = pyqtSignal()
+    external_script_add_requested = pyqtSignal(str)  # file_path
     external_script_remove_requested = pyqtSignal(str)  # script_name
     
     # Preset management
@@ -98,7 +98,8 @@ class SettingsView(QDialog):
         """Initialize the user interface"""
         self.setWindowTitle("Settings")
         self.setModal(True)
-        self.setMinimumSize(900, 600)
+        self.setMinimumSize(1100, 650)
+        self.resize(1200, 700)  # Set a comfortable default size
         
         layout = QVBoxLayout(self)
         
@@ -217,14 +218,29 @@ class SettingsView(QDialog):
         self.script_table = QTableWidget()
         self.script_table.setColumnCount(5)
         self.script_table.setHorizontalHeaderLabels([
-            "Script", "Status", "Hotkey", "Custom Name", "Actions"
+            "SCRIPT", "STATUS", "HOTKEY", "CUSTOM NAME", "ACTIONS"
         ])
         
         # Configure table
         self.script_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.script_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.script_table.setAlternatingRowColors(True)
+        self.script_table.verticalHeader().setVisible(False)  # Hide row numbers
+        self.script_table.setShowGrid(True)  # Show grid lines for clarity
+        
+        # Set up proper column sizing
         header = self.script_table.horizontalHeader()
-        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Script name stretches
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Status checkbox - fixed width
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)  # Hotkey - fixed width
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)  # Custom Name
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)  # Actions - fixed width
+        
+        # Set proper column widths to prevent truncation and overlapping
+        self.script_table.setColumnWidth(1, 80)   # STATUS - width for checkbox
+        self.script_table.setColumnWidth(2, 200)  # HOTKEY - increased to show full hotkeys
+        self.script_table.setColumnWidth(3, 150)  # CUSTOM NAME
+        self.script_table.setColumnWidth(4, 120)  # ACTIONS - slightly wider
         
         layout.addWidget(self.script_table)
         
@@ -381,29 +397,48 @@ class SettingsView(QDialog):
         self.script_table.setRowCount(len(self._script_data))
         
         for row, script in enumerate(self._script_data):
-            # Script name
+            # Script name - use full display name
             name_item = QTableWidgetItem(script['display_name'])
             if script['is_external']:
-                name_item.setToolTip("External script")
+                name_item.setToolTip(f"External script: {script.get('file_path', '')}")
+            else:
+                name_item.setToolTip(script['display_name'])
             self.script_table.setItem(row, 0, name_item)
             
-            # Status (enabled/disabled)
-            status_widget = QCheckBox()
-            status_widget.setChecked(not script['is_disabled'])
-            status_widget.toggled.connect(
+            # Status (enabled/disabled) - center the checkbox
+            status_container = QWidget()
+            status_layout = QHBoxLayout(status_container)
+            status_layout.setContentsMargins(2, 2, 2, 2)  # Small margins to prevent overflow
+            status_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            status_checkbox = QCheckBox()
+            status_checkbox.setChecked(not script['is_disabled'])
+            status_checkbox.toggled.connect(
                 lambda checked, s=script['name']: self.script_toggled.emit(s, checked)
             )
-            self.script_table.setCellWidget(row, 1, status_widget)
+            status_layout.addWidget(status_checkbox)
+            self.script_table.setCellWidget(row, 1, status_container)
             
-            # Hotkey
-            hotkey_btn = QPushButton(script.get('hotkey', 'None'))
+            # Hotkey - show full hotkey text with proper sizing
+            hotkey_text = script.get('hotkey', '')
+            if not hotkey_text:
+                hotkey_text = 'Click to set'
+            hotkey_btn = QPushButton(hotkey_text)
+            hotkey_btn.setMaximumHeight(28)  # Prevent button from being too tall
+            hotkey_btn.setStyleSheet("QPushButton { text-align: center; padding: 2px 4px; }")
+            hotkey_btn.setToolTip(f"Current hotkey: {hotkey_text}\nClick to change")
             hotkey_btn.clicked.connect(
                 lambda checked, s=script['name']: self.hotkey_configuration_requested.emit(s)
             )
             self.script_table.setCellWidget(row, 2, hotkey_btn)
             
             # Custom name
-            custom_name_btn = QPushButton(script.get('custom_name', 'Set...'))
+            custom_name = script.get('custom_name', '')
+            custom_btn_text = custom_name if custom_name else 'Set...'
+            custom_name_btn = QPushButton(custom_btn_text)
+            custom_name_btn.setMaximumHeight(28)  # Consistent height with hotkey button
+            custom_name_btn.setStyleSheet("QPushButton { text-align: center; padding: 2px 4px; }")
+            custom_name_btn.setToolTip(f"Custom name: {custom_name}" if custom_name else "Click to set a custom name")
             custom_name_btn.clicked.connect(
                 lambda checked, s=script['name']: self._on_set_custom_name(s)
             )
@@ -412,10 +447,25 @@ class SettingsView(QDialog):
             # Actions
             if script['is_external']:
                 remove_btn = QPushButton("Remove")
+                remove_btn.setMaximumHeight(28)  # Consistent height
+                remove_btn.setStyleSheet("QPushButton { padding: 2px 4px; }")
+                remove_btn.setToolTip(f"Remove external script: {script['display_name']}")
                 remove_btn.clicked.connect(
                     lambda checked, s=script['name']: self.external_script_remove_requested.emit(s)
                 )
                 self.script_table.setCellWidget(row, 4, remove_btn)
+            else:
+                # For built-in scripts, show a disabled placeholder or leave empty
+                placeholder = QLabel("Built-in")
+                placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                placeholder.setStyleSheet("color: #999;")
+                self.script_table.setCellWidget(row, 4, placeholder)
+        
+        # Set consistent row height and ensure proper layout
+        self.script_table.resizeRowsToContents()
+        # Add a bit of padding to rows
+        for row in range(self.script_table.rowCount()):
+            self.script_table.setRowHeight(row, 32)  # Fixed height for consistency
     
     def _update_preset_script_combo(self):
         """Update the script combo box in presets tab"""
@@ -463,9 +513,8 @@ class SettingsView(QDialog):
         )
         
         if file_path:
-            # Emit signal with file path - controller will handle the rest
-            self.external_script_add_requested.emit()
-            # Note: Controller will need to be updated to handle file selection
+            # Emit signal with file path
+            self.external_script_add_requested.emit(file_path)
     
     def _on_set_custom_name(self, script_name: str):
         """Handle set custom name button"""

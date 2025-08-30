@@ -212,6 +212,13 @@ class MVCApplication:
         self.tray_controller.settings_dialog_requested.connect(
             self._handle_settings_request
         )
+
+        # Model -> View connections for tray basics
+        tray_model = self.app_controller.get_tray_model()
+        tray_model.icon_visibility_changed.connect(
+            lambda visible: (self.tray_view.show_icon() if visible else self.tray_view.hide_icon())
+        )
+        tray_model.tooltip_changed.connect(self.tray_view.set_tooltip)
         
         # Initialize tray view based on models
         self._initialize_view_states()
@@ -302,7 +309,7 @@ class MVCApplication:
         settings_view.status_refresh_changed.connect(settings_controller.set_status_refresh_interval)
         settings_view.script_toggled.connect(settings_controller.toggle_script)
         settings_view.custom_name_changed.connect(settings_controller.set_script_custom_name)
-        settings_view.external_script_add_requested.connect(lambda: self._handle_add_external_script(settings_controller))
+        settings_view.external_script_add_requested.connect(lambda path: settings_controller.add_external_script(path))
         settings_view.external_script_remove_requested.connect(settings_controller.remove_external_script)
         settings_view.hotkey_configuration_requested.connect(lambda s: self._handle_hotkey_config(s, settings_controller))
         settings_view.preset_configuration_requested.connect(lambda s: self._handle_preset_editor(s, settings_controller))
@@ -333,20 +340,6 @@ class MVCApplication:
         settings_view.exec()
         
         self.logger.info("Settings dialog closed")
-    
-    def _handle_add_external_script(self, settings_controller):
-        """Handle adding an external script"""
-        from PyQt6.QtWidgets import QFileDialog
-        
-        file_path, _ = QFileDialog.getOpenFileName(
-            self.main_view,
-            "Select Python Script",
-            "",
-            "Python Files (*.py)"
-        )
-        
-        if file_path:
-            settings_controller.add_external_script(file_path)
     
     def _handle_hotkey_config(self, script_name, settings_controller):
         """Handle hotkey configuration dialog"""

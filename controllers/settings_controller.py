@@ -89,10 +89,11 @@ class SettingsController(QObject):
         all_scripts = self._script_collection.get_all_scripts()
         
         for script_info in all_scripts:
-            script_name = script_info.display_name
+            # Use the file stem as the script identifier (consistent with hotkey storage)
+            script_name = script_info.file_path.stem
             
             config = {
-                'name': script_name,
+                'name': script_name,  # Use file stem as unique identifier
                 'display_name': self._script_collection.get_script_display_name(script_info),
                 'is_external': self._script_collection.is_external_script(script_name),
                 'is_disabled': self._script_collection.is_script_disabled(script_name),
