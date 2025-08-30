@@ -89,16 +89,17 @@ class SettingsController(QObject):
         all_scripts = self._script_collection.get_all_scripts()
         
         for script_info in all_scripts:
-            # Use the file stem as the script identifier (consistent with hotkey storage)
-            script_name = script_info.file_path.stem
-            
+            # Use the file stem as the script identifier for settings/hotkeys
+            stem_name = script_info.file_path.stem
+            display_name = self._script_collection.get_script_display_name(script_info)
+
             config = {
-                'name': script_name,  # Use file stem as unique identifier
-                'display_name': self._script_collection.get_script_display_name(script_info),
-                'is_external': self._script_collection.is_external_script(script_name),
-                'is_disabled': self._script_collection.is_script_disabled(script_name),
-                'hotkey': self._hotkey_model.get_hotkey_for_script(script_name),
-                'custom_name': self._settings_manager.get_custom_name(script_name),
+                'name': stem_name,  # file stem identifier for settings/hotkeys
+                'display_name': display_name,
+                'is_external': self._script_collection.is_external_script(display_name),
+                'is_disabled': self._script_collection.is_script_disabled(display_name),
+                'hotkey': self._hotkey_model.get_hotkey_for_script(stem_name),
+                'custom_name': self._settings_manager.get_custom_name(stem_name),
                 'has_arguments': bool(script_info.arguments),
                 'arguments': script_info.arguments if script_info.arguments else [],
                 'file_path': str(script_info.file_path)
@@ -109,16 +110,18 @@ class SettingsController(QObject):
         return configs
     
     def _load_all_presets(self) -> Dict[str, Dict[str, Any]]:
-        """Load all script presets"""
-        presets = {}
-        
+        """Load all script presets keyed by display name for the view."""
+        presets: Dict[str, Dict[str, Any]] = {}
+
         all_scripts = self._script_collection.get_all_scripts()
         for script_info in all_scripts:
-            script_name = script_info.file_path.stem
-            script_presets = self._settings_manager.get_script_presets(script_name)
+            # Settings are stored under the file stem, but the view uses display names
+            stem_name = script_info.file_path.stem
+            display_name = script_info.display_name
+            script_presets = self._settings_manager.get_script_presets(stem_name)
             if script_presets:
-                presets[script_name] = script_presets
-        
+                presets[display_name] = script_presets
+
         return presets
     
     # Startup settings methods
@@ -305,7 +308,9 @@ class SettingsController(QObject):
             
             # Emit update
             presets = self._settings_manager.get_script_presets(script_name)
-            self.preset_updated.emit(script_name, presets)
+            # Map stem to display name for the view
+            display_name = self._get_display_name_for_stem(script_name) or script_name
+            self.preset_updated.emit(display_name, presets)
             
         except Exception as e:
             logger.error(f"Error saving preset for {script_name}: {e}")
@@ -320,7 +325,9 @@ class SettingsController(QObject):
             
             # Emit update
             presets = self._settings_manager.get_script_presets(script_name)
-            self.preset_updated.emit(script_name, presets)
+            # Map stem to display name for the view
+            display_name = self._get_display_name_for_stem(script_name) or script_name
+            self.preset_updated.emit(display_name, presets)
             
         except Exception as e:
             logger.error(f"Error deleting preset for {script_name}: {e}")
@@ -411,6 +418,16 @@ class SettingsController(QObject):
         # Add any validation logic here
         # For now, all settings are valid
         return True, ""
+
+    def _get_display_name_for_stem(self, stem: str) -> Optional[str]:
+        """Find the display name for a script given its file stem."""
+        try:
+            for s in self._script_collection.get_all_scripts():
+                if s.file_path.stem == stem:
+                    return s.display_name
+        except Exception:
+            pass
+        return None
     
     def save_all_settings(self):
         """Save all current settings"""

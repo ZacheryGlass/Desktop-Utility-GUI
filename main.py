@@ -321,7 +321,8 @@ class MVCApplication:
             settings_view.update_startup_settings(data.get('startup', {})),
             settings_view.update_behavior_settings(data.get('behavior', {})),
             settings_view.update_execution_settings(data.get('execution', {})),
-            settings_view.update_script_list(data.get('scripts', []))
+            settings_view.update_script_list(data.get('scripts', [])),
+            settings_view.set_all_presets(data.get('presets', {}))
         ))
         settings_controller.startup_settings_updated.connect(settings_view.update_startup_settings)
         settings_controller.behavior_settings_updated.connect(settings_view.update_behavior_settings)

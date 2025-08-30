@@ -376,7 +376,7 @@ class SettingsView(QDialog):
         self._script_data = scripts
         self._refresh_script_table()
         self._update_preset_script_combo()
-    
+
     def update_preset_list(self, script_name: str, presets: Dict[str, Any]):
         """Update the preset list for a script"""
         self._preset_data[script_name] = presets
@@ -384,6 +384,16 @@ class SettingsView(QDialog):
         # If this is the currently selected script, update the list
         if self.preset_script_combo.currentText() == script_name:
             self._refresh_preset_list(presets)
+
+    def set_all_presets(self, all_presets: Dict[str, Dict[str, Any]]):
+        """Replace all preset data and refresh the presets tab."""
+        self._preset_data = all_presets or {}
+        self._update_preset_script_combo()
+        current = self.preset_script_combo.currentText()
+        if current and current in self._preset_data:
+            self._refresh_preset_list(self._preset_data[current])
+        else:
+            self.preset_list.clear()
     
     def show_error(self, title: str, message: str):
         """Show an error message"""
@@ -419,7 +429,7 @@ class SettingsView(QDialog):
             status_checkbox = QCheckBox()
             status_checkbox.setChecked(not script['is_disabled'])
             status_checkbox.toggled.connect(
-                lambda checked, s=script['name']: self.script_toggled.emit(s, checked)
+                lambda checked, s=script['display_name']: self.script_toggled.emit(s, checked)
             )
             status_layout.addWidget(status_checkbox)
             status_container.setFixedWidth(70)
@@ -457,7 +467,7 @@ class SettingsView(QDialog):
                 remove_btn.setStyleSheet("QPushButton { padding: 2px 4px; }")
                 remove_btn.setToolTip(f"Remove external script: {script['display_name']}")
                 remove_btn.clicked.connect(
-                    lambda checked, s=script['name']: self.external_script_remove_requested.emit(s)
+                    lambda checked, s=script['display_name']: self.external_script_remove_requested.emit(s)
                 )
                 self.script_table.setCellWidget(row, 4, remove_btn)
             else:

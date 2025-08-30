@@ -115,6 +115,11 @@ class SettingsManager(QObject):
         self.settings.clear()
         self._ensure_defaults()
         self.settings.sync()
+
+    # Backwards-compatible alias used by controllers
+    def reset_all_settings(self) -> None:
+        """Clear all settings and restore defaults (alias)."""
+        self.reset_to_defaults()
     
     def sync(self) -> None:
         self.settings.sync()
@@ -455,6 +460,16 @@ class SettingsManager(QObject):
         """Get arguments for a specific preset."""
         presets = self.get_script_presets(script_name)
         return presets.get(preset_name, {})
+
+    def clear_all_presets(self) -> None:
+        """Remove all presets for all scripts."""
+        self.settings.beginGroup('script_presets')
+        try:
+            self.settings.remove('')
+            self.settings.sync()
+            logger.info("Cleared all script presets")
+        finally:
+            self.settings.endGroup()
     
     # External scripts management methods
     def get_external_scripts(self) -> Dict[str, str]:
@@ -612,3 +627,22 @@ class SettingsManager(QObject):
     def is_script_disabled(self, script_name: str) -> bool:
         """Check if a native script is disabled."""
         return script_name in self.get_disabled_scripts()
+
+    # Backwards-compatible helpers used by models/tests
+    def add_disabled_script(self, script_name: str) -> None:
+        """Mark a script as disabled."""
+        self.set_script_disabled(script_name, True)
+
+    def remove_disabled_script(self, script_name: str) -> None:
+        """Remove disabled mark from a script."""
+        self.set_script_disabled(script_name, False)
+
+    def clear_all_custom_names(self) -> None:
+        """Remove all stored custom display names."""
+        self.settings.beginGroup('custom_names')
+        try:
+            self.settings.remove('')
+            self.settings.sync()
+            logger.info("Cleared all custom script names")
+        finally:
+            self.settings.endGroup()
