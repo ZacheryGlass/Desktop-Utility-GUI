@@ -227,9 +227,11 @@ class SettingsView(QDialog):
         self.script_table.setAlternatingRowColors(True)
         self.script_table.verticalHeader().setVisible(False)  # Hide row numbers
         self.script_table.setShowGrid(True)  # Show grid lines for clarity
+        self.script_table.setWordWrap(False)  # Prevent widgets/text from wrapping across columns
         
         # Set up proper column sizing
         header = self.script_table.horizontalHeader()
+        header.setStretchLastSection(False)  # We control sizes explicitly
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Script name stretches
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Status checkbox - fixed width
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)  # Hotkey - fixed width
@@ -394,29 +396,33 @@ class SettingsView(QDialog):
     # Internal UI update methods
     def _refresh_script_table(self):
         """Refresh the scripts table display"""
+        # Reset table contents fully to avoid leftover widgets
+        self.script_table.clearContents()
         self.script_table.setRowCount(len(self._script_data))
         
         for row, script in enumerate(self._script_data):
             # Script name - use full display name
             name_item = QTableWidgetItem(script['display_name'])
+            name_item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
             if script['is_external']:
                 name_item.setToolTip(f"External script: {script.get('file_path', '')}")
             else:
                 name_item.setToolTip(script['display_name'])
             self.script_table.setItem(row, 0, name_item)
             
-            # Status (enabled/disabled) - center the checkbox
+            # Status (enabled/disabled) - center the checkbox, constrain width
             status_container = QWidget()
             status_layout = QHBoxLayout(status_container)
             status_layout.setContentsMargins(2, 2, 2, 2)  # Small margins to prevent overflow
             status_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            
+
             status_checkbox = QCheckBox()
             status_checkbox.setChecked(not script['is_disabled'])
             status_checkbox.toggled.connect(
                 lambda checked, s=script['name']: self.script_toggled.emit(s, checked)
             )
             status_layout.addWidget(status_checkbox)
+            status_container.setFixedWidth(70)
             self.script_table.setCellWidget(row, 1, status_container)
             
             # Hotkey - show full hotkey text with proper sizing
