@@ -1,0 +1,211 @@
+"""
+Script Controller - Manages script operations and coordination.
+
+This controller handles script execution requests, manages script state,
+and coordinates between script models and script-related views.
+"""
+import logging
+from typing import Optional, Dict, Any
+from PyQt6.QtCore import QObject, pyqtSignal
+
+from models.script_models import ScriptCollectionModel, ScriptExecutionModel, HotkeyModel
+
+logger = logging.getLogger('Controllers.Script')
+
+
+class ScriptController(QObject):
+    """
+    Controller for managing script operations and state.
+    
+    This controller:
+    - Handles script execution requests from views
+    - Manages script configuration and presets
+    - Coordinates hotkey assignments
+    - Provides script data to views
+    """
+    
+    # Signals for view updates
+    script_list_updated = pyqtSignal(list)  # List[ScriptInfo]
+    script_executed = pyqtSignal(str, dict)  # script_name, result
+    script_status_updated = pyqtSignal(str, str)  # script_name, status
+    hotkey_registration_failed = pyqtSignal(str, str, str)  # script_name, hotkey, error
+    
+    def __init__(self, script_collection: ScriptCollectionModel, 
+                 script_execution: ScriptExecutionModel, 
+                 hotkey_model: HotkeyModel):
+        super().__init__()
+        
+        self._script_collection = script_collection
+        self._script_execution = script_execution
+        self._hotkey_model = hotkey_model
+        
+        # Connect model signals to controller logic
+        self._setup_model_connections()
+        
+        logger.info("ScriptController initialized")
+    
+    # Script execution methods
+    def execute_script(self, script_name: str, arguments: Optional[Dict[str, Any]] = None):
+        """Execute a script with optional arguments"""
+        logger.info(f"Script execution requested: {script_name}")
+        
+        script_info = self._script_collection.get_script_by_name(script_name)
+        if not script_info:
+            logger.error(f"Script not found: {script_name}")
+            return
+        
+        # Handle different execution scenarios
+        if arguments:
+            # Execute with specific arguments
+            self._script_execution.execute_script(script_name, arguments)
+        elif script_info.arguments and self._has_preset_configuration(script_name):
+            # Script has arguments and presets available - this should be handled by view
+            # to show preset selection
+            logger.warning(f"Script {script_name} has arguments but no specific arguments provided")
+        else:
+            # Simple execution
+            self._script_execution.execute_script(script_name)
+    
+    def execute_script_with_preset(self, script_name: str, preset_name: str):
+        """Execute a script with a specific preset"""
+        logger.info(f"Script execution with preset requested: {script_name} -> {preset_name}")
+        self._script_execution.execute_script_with_preset(script_name, preset_name)
+    
+    def execute_script_with_choice(self, script_name: str, arg_name: str, choice: str):
+        """Execute a script with a specific choice for a choice-based argument"""
+        logger.info(f"Script execution with choice: {script_name} -> {arg_name}={choice}")
+        arguments = {arg_name: choice}
+        self._script_execution.execute_script(script_name, arguments)
+    
+    # Script management methods
+    def refresh_scripts(self):
+        """Refresh the script collection"""
+        logger.info("Script refresh requested")
+        scripts = self._script_collection.refresh_scripts()
+        self.script_list_updated.emit(scripts)
+    
+    def get_available_scripts(self):
+        """Get currently available scripts"""
+        return self._script_collection.get_available_scripts()
+    
+    def get_script_by_name(self, name: str):
+        """Get script info by name"""
+        return self._script_collection.get_script_by_name(name)
+    
+    def get_script_status(self, script_name: str) -> str:
+        """Get current status of a script"""
+        return self._script_execution.get_script_status(script_name)
+    
+    def is_script_disabled(self, script_name: str) -> bool:
+        """Check if a script is disabled"""
+        return self._script_collection.is_script_disabled(script_name)
+    
+    def is_external_script(self, script_name: str) -> bool:
+        """Check if a script is external"""
+        return self._script_collection.is_external_script(script_name)
+    
+    # Script configuration methods
+    def enable_script(self, script_name: str):
+        """Enable a disabled script"""
+        logger.info(f"Script enable requested: {script_name}")
+        self._script_collection.enable_script(script_name)
+    
+    def disable_script(self, script_name: str):
+        """Disable a script"""
+        logger.info(f"Script disable requested: {script_name}")
+        self._script_collection.disable_script(script_name)
+    
+    def add_external_script(self, script_name: str, script_path: str) -> bool:
+        """Add an external script"""
+        logger.info(f"External script addition requested: {script_name} -> {script_path}")
+        return self._script_collection.add_external_script(script_name, script_path)
+    
+    def remove_external_script(self, script_name: str):
+        """Remove an external script"""
+        logger.info(f"External script removal requested: {script_name}")
+        self._script_collection.remove_external_script(script_name)
+    
+    # Hotkey management methods
+    def get_script_hotkey(self, script_name: str) -> Optional[str]:
+        """Get hotkey assigned to a script"""
+        return self._hotkey_model.get_hotkey_for_script(script_name)
+    
+    def set_script_hotkey(self, script_name: str, hotkey: str):
+        """Set hotkey for a script"""
+        logger.info(f"Hotkey assignment requested: {script_name} -> {hotkey}")
+        
+        # Check if hotkey is available
+        if not self._hotkey_model.is_hotkey_available(hotkey, script_name):
+            existing_script = self._find_script_with_hotkey(hotkey)
+            error_msg = f"Hotkey {hotkey} is already assigned to {existing_script}"
+            self.hotkey_registration_failed.emit(script_name, hotkey, error_msg)
+            return
+        
+        self._hotkey_model.set_hotkey_for_script(script_name, hotkey)
+    
+    def remove_script_hotkey(self, script_name: str):
+        """Remove hotkey assignment from a script"""
+        logger.info(f"Hotkey removal requested: {script_name}")
+        self._hotkey_model.remove_hotkey_for_script(script_name)
+    
+    def get_all_hotkeys(self) -> Dict[str, str]:
+        """Get all script-to-hotkey mappings"""
+        return self._hotkey_model.get_all_hotkeys()
+    
+    def is_hotkey_available(self, hotkey: str, exclude_script: Optional[str] = None) -> bool:
+        """Check if a hotkey is available"""
+        return self._hotkey_model.is_hotkey_available(hotkey, exclude_script)
+    
+    # Hotkey execution (called by hotkey system)
+    def execute_script_from_hotkey(self, script_name: str):
+        """Execute a script triggered by hotkey"""
+        logger.info(f"Script execution from hotkey: {script_name}")
+        
+        script_info = self._script_collection.get_script_by_name(script_name)
+        if not script_info:
+            logger.error(f"Hotkey script not found: {script_name}")
+            return
+        
+        # For hotkey execution, use simple execution or default preset
+        if script_info.arguments and self._has_preset_configuration(script_name):
+            # Use first available preset for hotkey execution
+            # TODO: Could be enhanced to allow hotkey-specific preset selection
+            self._script_execution.execute_script(script_name)
+        else:
+            self._script_execution.execute_script(script_name)
+    
+    # Helper methods
+    def _has_preset_configuration(self, script_name: str) -> bool:
+        """Check if a script has preset configurations"""
+        # This would check the settings for preset configurations
+        # Implementation depends on settings structure
+        script_info = self._script_collection.get_script_by_name(script_name)
+        if not script_info:
+            return False
+        
+        # For now, return False - this would be implemented when preset system is connected
+        return False
+    
+    def _find_script_with_hotkey(self, hotkey: str) -> Optional[str]:
+        """Find which script currently has the given hotkey assigned"""
+        all_hotkeys = self._hotkey_model.get_all_hotkeys()
+        for script_name, assigned_hotkey in all_hotkeys.items():
+            if assigned_hotkey == hotkey:
+                return script_name
+        return None
+    
+    def _setup_model_connections(self):
+        """Set up connections to model signals"""
+        logger.debug("Setting up script controller model connections...")
+        
+        # Connect script collection changes
+        self._script_collection.scripts_filtered.connect(self.script_list_updated.emit)
+        
+        # Connect script execution results
+        self._script_execution.script_execution_completed.connect(self.script_executed.emit)
+        self._script_execution.script_status_changed.connect(self.script_status_updated.emit)
+        
+        # Connect hotkey registration failures
+        self._hotkey_model.hotkey_registration_failed.connect(self.hotkey_registration_failed.emit)
+        
+        logger.debug("Script controller model connections setup complete")
