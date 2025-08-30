@@ -133,11 +133,13 @@ class TrayManager(QObject):
         if not self.script_loader:
             return
         
-        # Refresh external scripts to ensure we have the latest changes
-        self.script_loader.refresh_external_scripts()
+        # Refresh external scripts and get the updated complete list
+        # refresh_external_scripts returns all currently loaded scripts (default + refreshed external)
+        all_scripts = self.script_loader.refresh_external_scripts()
         
-        # Discover all scripts
-        all_scripts = self.script_loader.discover_scripts()
+        # If we don't have any scripts yet (first load), do a full discovery
+        if not all_scripts:
+            all_scripts = self.script_loader.discover_scripts()
         
         # Filter out disabled native scripts and missing external scripts
         self.scripts = self._filter_available_scripts(all_scripts)

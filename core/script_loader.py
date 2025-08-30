@@ -223,11 +223,24 @@ class ScriptLoader:
         """Refresh only external scripts without affecting default scripts."""
         logger.info("Refreshing external scripts")
         
-        # Remove external scripts from loaded_scripts
-        external_script_names = list(self.settings.get_external_scripts().keys())
-        for script_name in external_script_names:
-            if script_name in self.loaded_scripts:
-                del self.loaded_scripts[script_name]
+        # First, identify all currently loaded external scripts
+        # These are scripts that are NOT in the default scripts directory
+        default_script_names = set()
+        if self.scripts_directory.exists():
+            for script_file in self.scripts_directory.glob("*.py"):
+                if not script_file.name.startswith("__"):
+                    default_script_names.add(script_file.stem)
+        
+        # Remove ALL external scripts from loaded_scripts (not just the ones still in settings)
+        scripts_to_remove = []
+        for script_name, script_info in self.loaded_scripts.items():
+            # If it's not a default script, it must be external
+            if script_name not in default_script_names:
+                scripts_to_remove.append(script_name)
+        
+        for script_name in scripts_to_remove:
+            logger.debug(f"Removing external script from loaded: {script_name}")
+            del self.loaded_scripts[script_name]
         
         # Remove external script failures from failed_scripts
         failed_keys_to_remove = [key for key in self.failed_scripts.keys() if "(external)" in key]
