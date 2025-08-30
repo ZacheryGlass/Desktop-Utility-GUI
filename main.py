@@ -17,8 +17,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from controllers.app_controller import AppController
 from controllers.script_controller import ScriptController
 from controllers.tray_controller import TrayController
+from controllers.settings_controller import SettingsController
 from views.tray_view import TrayView
 from views.main_view import MainView
+from views.settings_view import SettingsView
+from views.hotkey_config_view import HotkeyConfigView
+from views.preset_editor_view import PresetEditorView
 from core.hotkey_manager import HotkeyManager
 
 
@@ -275,14 +279,167 @@ class MVCApplication:
         """Handle settings dialog request"""
         self.logger.info("Settings dialog requested")
         
-        # For now, show a simple message
-        # In a full implementation, this would open the settings dialog
-        QMessageBox.information(
-            self.main_view,
-            "Settings",
-            "Settings dialog would open here.\n\n"
-            "This is a placeholder during MVC refactoring."
+        # Create settings controller
+        settings_controller = SettingsController(
+            self.app_controller.get_application_model(),
+            self.script_controller,
+            None  # parent must be a QObject or None
         )
+        
+        # Create settings view
+        settings_view = SettingsView(self.main_view)
+        
+        # Wire controller to view
+        # View -> Controller connections
+        settings_view.run_on_startup_changed.connect(settings_controller.set_run_on_startup)
+        settings_view.start_minimized_changed.connect(settings_controller.set_start_minimized)
+        settings_view.show_startup_notification_changed.connect(settings_controller.set_show_startup_notification)
+        settings_view.minimize_to_tray_changed.connect(settings_controller.set_minimize_to_tray)
+        settings_view.close_to_tray_changed.connect(settings_controller.set_close_to_tray)
+        settings_view.single_instance_changed.connect(settings_controller.set_single_instance)
+        settings_view.show_script_notifications_changed.connect(settings_controller.set_show_script_notifications)
+        settings_view.script_timeout_changed.connect(settings_controller.set_script_timeout)
+        settings_view.status_refresh_changed.connect(settings_controller.set_status_refresh_interval)
+        settings_view.script_toggled.connect(settings_controller.toggle_script)
+        settings_view.custom_name_changed.connect(settings_controller.set_script_custom_name)
+        settings_view.external_script_add_requested.connect(lambda: self._handle_add_external_script(settings_controller))
+        settings_view.external_script_remove_requested.connect(settings_controller.remove_external_script)
+        settings_view.hotkey_configuration_requested.connect(lambda s: self._handle_hotkey_config(s, settings_controller))
+        settings_view.preset_configuration_requested.connect(lambda s: self._handle_preset_editor(s, settings_controller))
+        settings_view.reset_requested.connect(settings_controller.reset_settings)
+        settings_view.settings_accepted.connect(settings_controller.save_all_settings)
+        
+        # Controller -> View connections
+        settings_controller.settings_loaded.connect(lambda data: (
+            settings_view.update_startup_settings(data.get('startup', {})),
+            settings_view.update_behavior_settings(data.get('behavior', {})),
+            settings_view.update_execution_settings(data.get('execution', {})),
+            settings_view.update_script_list(data.get('scripts', []))
+        ))
+        settings_controller.startup_settings_updated.connect(settings_view.update_startup_settings)
+        settings_controller.behavior_settings_updated.connect(settings_view.update_behavior_settings)
+        settings_controller.execution_settings_updated.connect(settings_view.update_execution_settings)
+        settings_controller.script_list_updated.connect(settings_view.update_script_list)
+        # hotkey_updated and preset_updated are handled by script_list_updated
+        settings_controller.preset_updated.connect(settings_view.update_preset_list)
+        settings_controller.settings_saved.connect(lambda: settings_view.show_info("Settings Saved", "Settings have been saved successfully"))
+        settings_controller.settings_reset.connect(lambda cat: settings_view.show_info("Settings Reset", f"{cat.title()} settings have been reset"))
+        settings_controller.error_occurred.connect(settings_view.show_error)
+        
+        # Load current settings
+        settings_controller.load_all_settings()
+        
+        # Show dialog
+        settings_view.exec()
+        
+        self.logger.info("Settings dialog closed")
+    
+    def _handle_add_external_script(self, settings_controller):
+        """Handle adding an external script"""
+        from PyQt6.QtWidgets import QFileDialog
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self.main_view,
+            "Select Python Script",
+            "",
+            "Python Files (*.py)"
+        )
+        
+        if file_path:
+            settings_controller.add_external_script(file_path)
+    
+    def _handle_hotkey_config(self, script_name, settings_controller):
+        """Handle hotkey configuration dialog"""
+        # Get current hotkey for script
+        current_hotkey = self.script_controller._hotkey_model.get_hotkey_for_script(script_name)
+        
+        # Create hotkey config view
+        hotkey_view = HotkeyConfigView(script_name, current_hotkey, self.main_view)
+        
+        # Connect signals
+        hotkey_view.hotkey_set.connect(lambda h: settings_controller.set_script_hotkey(script_name, h))
+        hotkey_view.hotkey_cleared.connect(lambda: settings_controller.set_script_hotkey(script_name, ""))
+        hotkey_view.validation_requested.connect(lambda h: self._validate_hotkey(h, script_name, hotkey_view))
+        
+        # Show dialog
+        hotkey_view.exec()
+    
+    def _handle_preset_editor(self, script_name, settings_controller):
+        """Handle preset editor dialog"""
+        # Get script info
+        script_info = self.script_controller._script_collection.get_script_by_name(script_name)
+        if not script_info:
+            return
+        
+        # Get script arguments
+        script_args = []
+        if script_info.arguments:
+            for arg in script_info.arguments:
+                script_args.append({
+                    'name': arg.name,
+                    'type': arg.type,
+                    'help': arg.help,
+                    'choices': arg.choices
+                })
+        
+        # Get existing presets
+        existing_presets = settings_controller.get_script_presets(script_info.file_path.stem)
+        
+        # Create preset editor view
+        preset_view = PresetEditorView(script_name, script_args, existing_presets, self.main_view)
+        
+        # Connect signals
+        preset_view.preset_saved.connect(
+            lambda n, a: settings_controller.save_script_preset(script_info.file_path.stem, n, a)
+        )
+        preset_view.preset_deleted.connect(
+            lambda n: settings_controller.delete_script_preset(script_info.file_path.stem, n)
+        )
+        preset_view.auto_generate_requested.connect(
+            lambda: self._auto_generate_presets(script_info.file_path.stem, settings_controller, preset_view)
+        )
+        
+        # Show dialog
+        preset_view.exec()
+    
+    def _validate_hotkey(self, hotkey, script_name, hotkey_view):
+        """Validate a hotkey and show feedback in view"""
+        # Check if hotkey is available
+        if not self.script_controller.is_hotkey_available(hotkey, script_name):
+            existing_script = self._find_script_with_hotkey(hotkey)
+            hotkey_view.show_validation_error(f"Hotkey already assigned to {existing_script}")
+            return False
+        
+        # Check for system hotkeys
+        system_hotkeys = [
+            'Ctrl+C', 'Ctrl+V', 'Ctrl+X', 'Ctrl+A', 'Ctrl+Z', 'Ctrl+Y',
+            'Ctrl+S', 'Ctrl+O', 'Ctrl+N', 'Ctrl+P', 'Ctrl+F',
+            'Alt+Tab', 'Alt+F4', 'Win+L', 'Win+D', 'Win+Tab'
+        ]
+        
+        if hotkey in system_hotkeys:
+            hotkey_view.show_validation_warning("This hotkey is reserved by the system")
+        else:
+            hotkey_view.clear_validation()
+        
+        return True
+    
+    def _find_script_with_hotkey(self, hotkey):
+        """Find which script has a specific hotkey assigned"""
+        all_hotkeys = self.script_controller._hotkey_model.get_all_hotkeys()
+        for script_name, assigned_hotkey in all_hotkeys.items():
+            if assigned_hotkey == hotkey:
+                return script_name
+        return None
+    
+    def _auto_generate_presets(self, script_name, settings_controller, preset_view):
+        """Auto-generate presets and update view"""
+        settings_controller.auto_generate_presets(script_name)
+        
+        # Refresh presets in view
+        new_presets = settings_controller.get_script_presets(script_name)
+        for preset_name, arguments in new_presets.items():
+            preset_view.add_preset(preset_name, arguments)
 
 
 def main():
