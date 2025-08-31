@@ -209,7 +209,7 @@ class SettingsView(QDialog):
         self.script_table = QTableWidget()
         self.script_table.setColumnCount(5)
         self.script_table.setHorizontalHeaderLabels([
-            "FILENAME", "STATUS", "HOTKEY", "CUSTOM NAME", "ACTIONS"
+            "DISPLAY NAME", "STATUS", "HOTKEY", "FILENAME", "ACTIONS"
         ])
         
         # Configure table
@@ -223,16 +223,16 @@ class SettingsView(QDialog):
         # Set up proper column sizing
         header = self.script_table.horizontalHeader()
         header.setStretchLastSection(False)  # We control sizes explicitly
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Script name stretches
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Display name stretches
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Status checkbox - fixed width
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)  # Hotkey - fixed width
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)  # Custom Name
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)  # Filename - fixed width
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)  # Actions - fixed width
         
         # Set proper column widths to prevent truncation and overlapping
         self.script_table.setColumnWidth(1, 80)   # STATUS - width for checkbox
-        self.script_table.setColumnWidth(2, 200)  # HOTKEY - increased to show full hotkeys
-        self.script_table.setColumnWidth(3, 150)  # CUSTOM NAME
+        self.script_table.setColumnWidth(2, 200)  # HOTKEY - show full hotkeys
+        self.script_table.setColumnWidth(3, 160)  # FILENAME - narrower
         self.script_table.setColumnWidth(4, 120)  # ACTIONS - slightly wider
         
         layout.addWidget(self.script_table)
@@ -433,6 +433,20 @@ class SettingsView(QDialog):
         self.script_table.setRowCount(len(self._script_data))
         
         for row, script in enumerate(self._script_data):
+            # Display Name (customizable)
+            custom_name = script.get('custom_name', '')
+            custom_btn_text = custom_name if custom_name else 'Click to set'
+            custom_name_btn = QPushButton(custom_btn_text)
+            custom_name_btn.setMaximumHeight(28)
+            custom_name_btn.setStyleSheet("QPushButton { text-align: center; padding: 2px 4px; }")
+            custom_name_btn.setToolTip(
+                f"Custom name: {custom_name}" if custom_name else "Click to set a custom display name"
+            )
+            custom_name_btn.clicked.connect(
+                lambda checked, s=script['name']: self._on_set_custom_name(s)
+            )
+            self.script_table.setCellWidget(row, 0, custom_name_btn)
+
             # Filename (explicitly show the underlying file name)
             file_name = script.get('file_path')
             try:
@@ -440,8 +454,8 @@ class SettingsView(QDialog):
                 display_file = Path(file_name).name if file_name else script.get('name', '')
             except Exception:
                 display_file = script.get('name', '')
-            name_item = QTableWidgetItem(display_file)
-            name_item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+            file_item = QTableWidgetItem(display_file)
+            file_item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
             # Tooltip shows full path and current display name for clarity
             tooltip_parts = []
             if file_name:
@@ -449,8 +463,8 @@ class SettingsView(QDialog):
             if script.get('display_name'):
                 tooltip_parts.append(f"Display: {script['display_name']}")
             if tooltip_parts:
-                name_item.setToolTip("\n".join(tooltip_parts))
-            self.script_table.setItem(row, 0, name_item)
+                file_item.setToolTip("\n".join(tooltip_parts))
+            self.script_table.setItem(row, 3, file_item)
             
             # Status (enabled/disabled) - center the checkbox, constrain width
             status_container = QWidget()
@@ -481,18 +495,6 @@ class SettingsView(QDialog):
                 lambda checked, s=script['name']: self.hotkey_configuration_requested.emit(s)
             )
             self.script_table.setCellWidget(row, 2, hotkey_btn)
-            
-            # Custom name
-            custom_name = script.get('custom_name', '')
-            custom_btn_text = custom_name if custom_name else 'Set...'
-            custom_name_btn = QPushButton(custom_btn_text)
-            custom_name_btn.setMaximumHeight(28)  # Consistent height with hotkey button
-            custom_name_btn.setStyleSheet("QPushButton { text-align: center; padding: 2px 4px; }")
-            custom_name_btn.setToolTip(f"Custom name: {custom_name}" if custom_name else "Click to set a custom name")
-            custom_name_btn.clicked.connect(
-                lambda checked, s=script['name']: self._on_set_custom_name(s)
-            )
-            self.script_table.setCellWidget(row, 3, custom_name_btn)
             
             # Actions
             if script['is_external']:
