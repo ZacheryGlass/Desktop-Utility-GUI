@@ -128,9 +128,24 @@ class ScriptExecutor:
             module_name = script_info.file_path.stem
             
             if module_name in self.loaded_modules:
-                # Reload module for changes
-                importlib.reload(self.loaded_modules[module_name])
+                # Reload module for changes; ensure present in sys.modules for reload()
                 module = self.loaded_modules[module_name]
+                try:
+                    if module_name not in sys.modules:
+                        sys.modules[module_name] = module
+                    importlib.reload(module)
+                except Exception:
+                    # If reload fails (e.g., not in sys.modules), fall back to fresh load
+                    spec = importlib.util.spec_from_file_location(module_name, script_info.file_path)
+                    if spec is None or spec.loader is None:
+                        return ExecutionResult(
+                            success=False,
+                            error=f"Could not load module spec for {script_info.file_path}"
+                        )
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[module_name] = module
+                    spec.loader.exec_module(module)
+                    self.loaded_modules[module_name] = module
             else:
                 # Load module for first time
                 spec = importlib.util.spec_from_file_location(module_name, script_info.file_path)
@@ -141,6 +156,8 @@ class ScriptExecutor:
                     )
                 
                 module = importlib.util.module_from_spec(spec)
+                # Insert into sys.modules before execution to support reloads/circular imports
+                sys.modules[module_name] = module
                 spec.loader.exec_module(module)
                 self.loaded_modules[module_name] = module
             
