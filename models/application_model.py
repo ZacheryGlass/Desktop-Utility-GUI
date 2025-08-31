@@ -86,12 +86,16 @@ class ApplicationStateModel(QObject):
         
         # Update system startup registration
         try:
-            if enabled:
-                self._startup_manager.enable_startup()
-            else:
-                self._startup_manager.disable_startup()
-                
-            logger.info(f"Startup registration {'enabled' if enabled else 'disabled'}")
+            # Use StartupManager API (register/unregister)
+            success = self._startup_manager.set_startup(enabled)
+            if success and enabled:
+                # Ensure path is up-to-date (e.g., after moves)
+                try:
+                    self._startup_manager.update_path_if_needed()
+                except Exception:
+                    pass
+            
+            logger.info(f"Startup registration {'enabled' if enabled else 'disabled'} (success={success})")
         except Exception as e:
             logger.error(f"Failed to update startup registration: {e}")
     
