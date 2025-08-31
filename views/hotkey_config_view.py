@@ -199,99 +199,25 @@ class HotkeyRecorderWidget(QLineEdit):
         if self.recording:
             self.stop_recording()
 
-
-class HotkeyConfigView(QDialog):
-    """Dialog for configuring a script hotkey using the recorder widget"""
-
-    hotkey_set = pyqtSignal(str)
-    hotkey_cleared = pyqtSignal()
-    validation_requested = pyqtSignal(str)
-
-    def __init__(self, script_name: str, current_hotkey: Optional[str] = None, parent=None):
-        super().__init__(parent)
-        self.script_name = script_name
-        self.current_hotkey = current_hotkey or ""
-        self.setWindowTitle(f"Set Hotkey - {script_name}")
-        self.setModal(True)
-        self.setMinimumSize(420, 180)
-
-        self._init_ui()
-
-    def _init_ui(self):
-        layout = QVBoxLayout(self)
-
-        # Header
-        header = QLabel(f"Press the desired hotkey for: <b>{self.script_name}</b>")
-        header.setWordWrap(True)
-        layout.addWidget(header)
-
-        # Recorder widget
-        self.recorder = HotkeyRecorderWidget()
-        if self.current_hotkey:
-            self.recorder.setText(self.current_hotkey)
-        layout.addWidget(self.recorder)
-
-        # Validation/status label
-        self.status_label = QLabel("")
-        layout.addWidget(self.status_label)
-
-        # Buttons
-        buttons = QDialogButtonBox()
-        self.save_btn = buttons.addButton("Save", QDialogButtonBox.ButtonRole.AcceptRole)
-        self.clear_btn = buttons.addButton("Clear", QDialogButtonBox.ButtonRole.ResetRole)
-        self.cancel_btn = buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
-
-        self.save_btn.clicked.connect(self._on_save)
-        self.clear_btn.clicked.connect(self._on_clear)
-        buttons.rejected.connect(self.reject)
-
-        layout.addWidget(buttons)
-
-    def _on_save(self):
-        hotkey = self.recorder.text().strip()
-        if not hotkey:
-            self.show_validation_error("Please record a hotkey before saving")
-            return
-        # Ask controller to validate (may update status label)
-        self.validation_requested.emit(hotkey)
-        # Emit selection for controller to persist
-        self.hotkey_set.emit(hotkey)
-        self.accept()
-
-    def _on_clear(self):
-        self.hotkey_cleared.emit()
-        self.accept()
-
-    # Validation feedback helpers (called by controller)
-    def show_validation_error(self, message: str):
-        self.status_label.setText(message)
-        self.status_label.setStyleSheet("color: #ff6b6b;")
-
-    def show_validation_warning(self, message: str):
-        self.status_label.setText(message)
-        self.status_label.setStyleSheet("color: #f0ad4e;")
-
-    def clear_validation(self):
-        self.status_label.clear()
-        self.status_label.setStyleSheet("")
-    
     def get_hotkey(self) -> str:
-        """Get the current hotkey string"""
-        text = self.text()
+        """Return the currently displayed hotkey string (or empty)."""
+        text = self.text().strip()
         return text if text and text != "Press a key combination..." else ""
-    
+
     def set_hotkey(self, hotkey_string: str):
-        """Set the hotkey display"""
+        """Programmatically set the displayed hotkey string."""
         self.setText(hotkey_string if hotkey_string else "")
         if hotkey_string:
             self.hotkey_recorded.emit(hotkey_string)
-    
+
     def clear(self):
-        """Clear the hotkey"""
+        """Clear the recorded state and display."""
         self.current_modifiers.clear()
         self.current_key = None
         self.setText("")
         self.setPlaceholderText("Click here and press a key combination...")
+
+
 
 
 class HotkeyConfigView(QDialog):

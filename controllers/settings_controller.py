@@ -210,6 +210,7 @@ class SettingsController(QObject):
                 # Remove hotkey
                 self._script_controller.remove_script_hotkey(script_name)
             
+            # Notify views; granular update handled by settings view
             self.hotkey_updated.emit(script_name, hotkey)
             
         except Exception as e:

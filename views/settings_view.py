@@ -8,7 +8,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGroupBox, QCheckBox,
-    QLabel, QPushButton, QDialogButtonBox, QWidget, QTabWidget,
+    QLabel, QPushButton, QWidget, QTabWidget,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QSpinBox, QComboBox, QListWidget, QListWidgetItem, QMessageBox,
     QFileDialog, QInputDialog, QFrame
@@ -61,9 +61,7 @@ class SettingsView(QDialog):
     # Reset operations
     reset_requested = pyqtSignal(str)  # category
     
-    # Dialog actions
-    settings_accepted = pyqtSignal()
-    settings_rejected = pyqtSignal()
+    # Dialog actions (instant-apply mode: no OK/Cancel buttons)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -113,14 +111,7 @@ class SettingsView(QDialog):
         self._create_presets_tab()
         self._create_reset_tab()
         
-        # Dialog buttons
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | 
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        button_box.accepted.connect(self._on_accept)
-        button_box.rejected.connect(self._on_reject)
-        layout.addWidget(button_box)
+        # Instant-apply: remove OK/Cancel; window can be closed via title bar
     
     def _create_general_tab(self):
         """Create the General settings tab"""
@@ -255,9 +246,7 @@ class SettingsView(QDialog):
         
         button_layout.addStretch()
         
-        refresh_btn = QPushButton("Refresh")
-        refresh_btn.clicked.connect(self._refresh_script_table)
-        button_layout.addWidget(refresh_btn)
+        # Instant-apply: remove explicit Refresh button; view updates via signals
         
         layout.addLayout(button_layout)
         
@@ -376,6 +365,34 @@ class SettingsView(QDialog):
         self._script_data = scripts
         self._refresh_script_table()
         self._update_preset_script_combo()
+
+    def update_script_hotkey(self, script_name: str, hotkey: str):
+        """Update only the hotkey UI for a specific script.
+
+        script_name is the file stem identifier (matches script dict 'name').
+        """
+        # Find the script row
+        row_index = -1
+        for i, script in enumerate(self._script_data):
+            if script.get('name') == script_name:
+                row_index = i
+                # update backing data
+                script['hotkey'] = hotkey
+                break
+
+        if row_index < 0:
+            # Script not found in current view; nothing to update
+            return
+
+        # Update the HOTKEY cell's button text and tooltip
+        btn = self.script_table.cellWidget(row_index, 2)
+        if isinstance(btn, QPushButton):
+            new_text = hotkey if hotkey else 'Click to set'
+            btn.setText(new_text)
+            if hotkey:
+                btn.setToolTip(f"Current hotkey: {hotkey}\nClick to change")
+            else:
+                btn.setToolTip("No hotkey set. Click to change")
 
     def update_preset_list(self, script_name: str, presets: Dict[str, Any]):
         """Update the preset list for a script"""
@@ -509,15 +526,6 @@ class SettingsView(QDialog):
             self.preset_list.addItem(item_text)
     
     # UI event handlers
-    def _on_accept(self):
-        """Handle dialog accept"""
-        self.settings_accepted.emit()
-        self.accept()
-    
-    def _on_reject(self):
-        """Handle dialog reject"""
-        self.settings_rejected.emit()
-        self.reject()
     
     def _on_add_external_script(self):
         """Handle add external script button"""

@@ -314,7 +314,7 @@ class MVCApplication:
         settings_view.hotkey_configuration_requested.connect(lambda s: self._handle_hotkey_config(s, settings_controller))
         settings_view.preset_configuration_requested.connect(lambda s: self._handle_preset_editor(s, settings_controller))
         settings_view.reset_requested.connect(settings_controller.reset_settings)
-        settings_view.settings_accepted.connect(settings_controller.save_all_settings)
+        # Instant-apply: no accept/save button; models persist on change
         
         # Controller -> View connections
         settings_controller.settings_loaded.connect(lambda data: (
@@ -328,7 +328,8 @@ class MVCApplication:
         settings_controller.behavior_settings_updated.connect(settings_view.update_behavior_settings)
         settings_controller.execution_settings_updated.connect(settings_view.update_execution_settings)
         settings_controller.script_list_updated.connect(settings_view.update_script_list)
-        # hotkey_updated and preset_updated are handled by script_list_updated
+        # Update hotkeys incrementally for better UX
+        settings_controller.hotkey_updated.connect(lambda s, h: settings_view.update_script_hotkey(s, h))
         settings_controller.preset_updated.connect(settings_view.update_preset_list)
         settings_controller.settings_saved.connect(lambda: settings_view.show_info("Settings Saved", "Settings have been saved successfully"))
         settings_controller.settings_reset.connect(lambda cat: settings_view.show_info("Settings Reset", f"{cat.title()} settings have been reset"))
