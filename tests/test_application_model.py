@@ -122,18 +122,22 @@ class TestApplicationStateModel(unittest.TestCase):
         self.mock_settings.set.assert_called_with('startup/start_minimized', True)
     
     def test_startup_manager_integration(self):
-        """Test integration with startup manager"""
+        """Test integration with startup manager (new API)."""
+        # Ensure set_startup returns True so update_path_if_needed is attempted
+        self.mock_startup.set_startup.return_value = True
+
         # Test enabling startup
         self.model.set_run_on_startup(True)
-        
-        # Verify startup manager was called
-        self.mock_startup.enable_startup.assert_called_once()
-        
+
+        # Verify set_startup(True) called and path update attempted
+        self.mock_startup.set_startup.assert_any_call(True)
+        self.mock_startup.update_path_if_needed.assert_called_once()
+
         # Test disabling startup
         self.model.set_run_on_startup(False)
-        
-        # Verify startup manager was called
-        self.mock_startup.disable_startup.assert_called_once()
+
+        # Verify set_startup(False) called as well
+        self.mock_startup.set_startup.assert_any_call(False)
     
     def test_window_geometry_management(self):
         """Test window geometry management"""
