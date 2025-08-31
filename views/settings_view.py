@@ -546,7 +546,9 @@ class SettingsView(QDialog):
                 current = s
                 break
         current_disabled = bool(current.get('is_disabled', False)) if current else False
-        self.script_toggled.emit(name_key, not current_disabled)
+        # Clicking toggles disabled state; enabled value equals current disabled state
+        # If currently disabled -> enable (True); if enabled -> disable (False)
+        self.script_toggled.emit(name_key, current_disabled)
     
     def _update_preset_script_combo(self):
         """Update the script combo box in presets tab"""
