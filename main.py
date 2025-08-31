@@ -363,7 +363,19 @@ class MVCApplication:
         self._settings_view.external_script_add_requested.connect(lambda path: self._settings_controller.add_external_script(path))
         self._settings_view.external_script_remove_requested.connect(self._settings_controller.remove_external_script)
         self._settings_view.hotkey_configuration_requested.connect(lambda s: self._handle_hotkey_config(s, self._settings_controller))
-        self._settings_view.preset_configuration_requested.connect(lambda s: self._handle_preset_editor(s, self._settings_controller))
+        # Add/Edit presets are initiated from Script Args tab
+        self._settings_view.add_preset_requested.connect(lambda s: self._handle_preset_editor(s, self._settings_controller))
+        self._settings_view.edit_preset_requested.connect(lambda s, p: self._handle_preset_editor(s, self._settings_controller, p))
+        # Delete preset from Script Args tab
+        self._settings_view.preset_deleted.connect(
+            lambda display_name, preset: self._settings_controller.delete_script_preset(
+                (self.script_controller._script_collection.get_script_by_name(display_name).file_path.stem
+                 if self.script_controller._script_collection.get_script_by_name(display_name) else display_name),
+                preset
+            )
+        )
+        # Wire Auto-Generate from Script Args tab to controller
+        self._settings_view.auto_generate_presets_requested.connect(self._settings_controller.auto_generate_presets)
         self._settings_view.reset_requested.connect(self._settings_controller.reset_settings)
         # Instant-apply: no accept/save button; models persist on change
         
@@ -382,6 +394,11 @@ class MVCApplication:
         # Update hotkeys incrementally for better UX
         self._settings_controller.hotkey_updated.connect(lambda s, h: self._settings_view.update_script_hotkey(s, h))
         self._settings_controller.preset_updated.connect(self._settings_view.update_preset_list)
+        # When presets change, refresh tray menu so preset submenus reflect changes
+        try:
+            self._settings_controller.preset_updated.connect(lambda *_: self.tray_controller.update_menu())
+        except Exception:
+            pass
         self._settings_controller.settings_saved.connect(lambda: self._settings_view.show_info("Settings Saved", "Settings have been saved successfully"))
         self._settings_controller.settings_reset.connect(lambda cat: self._settings_view.show_info("Settings Reset", f"{cat.title()} settings have been reset"))
         self._settings_controller.error_occurred.connect(self._settings_view.show_error)
@@ -421,8 +438,8 @@ class MVCApplication:
         # Show dialog
         hotkey_view.exec()
     
-    def _handle_preset_editor(self, script_name, settings_controller):
-        """Handle preset editor dialog"""
+    def _handle_preset_editor(self, script_name, settings_controller, preset_name: str = None):
+        """Handle preset editor dialog for add or edit."""
         # Get script info
         script_info = self.script_controller._script_collection.get_script_by_name(script_name)
         if not script_info:
@@ -439,22 +456,22 @@ class MVCApplication:
                     'choices': arg.choices
                 })
         
-        # Get existing presets
+        # Determine initial values for edit vs add
         existing_presets = settings_controller.get_script_presets(script_info.file_path.stem)
-        
-        # Create preset editor view
-        preset_view = PresetEditorView(script_name, script_args, existing_presets, self.main_view)
+        initial_name = preset_name if preset_name else None
+        initial_args = existing_presets.get(preset_name, {}) if preset_name else None
+
+        # Create preset editor view (single-preset editor)
+        preset_view = PresetEditorView(
+            script_name, script_args, self.main_view,
+            initial_name=initial_name, initial_args=initial_args
+        )
         
         # Connect signals
         preset_view.preset_saved.connect(
             lambda n, a: settings_controller.save_script_preset(script_info.file_path.stem, n, a)
         )
-        preset_view.preset_deleted.connect(
-            lambda n: settings_controller.delete_script_preset(script_info.file_path.stem, n)
-        )
-        preset_view.auto_generate_requested.connect(
-            lambda: self._auto_generate_presets(script_info.file_path.stem, settings_controller, preset_view)
-        )
+        # Deletion handled from Script Args tab; editor focuses on a single preset
         
         # Show dialog
         preset_view.exec()

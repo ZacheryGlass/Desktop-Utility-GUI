@@ -1,4 +1,4 @@
-"""
+﻿"""
 Settings View - UI component for application settings.
 
 This view provides the settings dialog interface without business logic,
@@ -54,7 +54,8 @@ class SettingsView(QDialog):
     external_script_remove_requested = pyqtSignal(str)  # script_name
     
     # Preset management
-    preset_configuration_requested = pyqtSignal(str)  # script_name
+    add_preset_requested = pyqtSignal(str)  # script_name
+    edit_preset_requested = pyqtSignal(str, str)  # script_name, preset_name
     preset_deleted = pyqtSignal(str, str)  # script_name, preset_name
     auto_generate_presets_requested = pyqtSignal(str)  # script_name
     
@@ -287,6 +288,7 @@ class SettingsView(QDialog):
         button_layout = QHBoxLayout()
         
         add_preset_btn = QPushButton("Add Preset...")
+        add_preset_btn.setToolTip("Create a new preset for this script")
         add_preset_btn.clicked.connect(self._on_add_preset)
         button_layout.addWidget(add_preset_btn)
         
@@ -316,7 +318,7 @@ class SettingsView(QDialog):
         
         # Warning
         warning = QLabel(
-            "⚠️ Warning: Reset operations cannot be undone!\n\n"
+            "âš ï¸ Warning: Reset operations cannot be undone!\n\n"
             "Choose what you want to reset:"
         )
         warning.setStyleSheet("color: orange;")
@@ -618,7 +620,7 @@ class SettingsView(QDialog):
         """Handle add preset button"""
         script_name = self.preset_script_combo.currentText()
         if script_name:
-            self.preset_configuration_requested.emit(script_name)
+            self.add_preset_requested.emit(script_name)
     
     def _on_edit_preset(self):
         """Handle edit preset button"""
@@ -629,8 +631,8 @@ class SettingsView(QDialog):
             preset_name = preset_text.split(':')[0]
             script_name = self.preset_script_combo.currentText()
             
-            # Emit signal for editing
-            self.preset_configuration_requested.emit(script_name)
+            # Emit signal for editing specific preset
+            self.edit_preset_requested.emit(script_name, preset_name)
     
     def _on_delete_preset(self):
         """Handle delete preset button"""

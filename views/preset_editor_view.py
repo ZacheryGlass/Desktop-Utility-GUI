@@ -1,4 +1,4 @@
-"""
+﻿"""
 Preset Editor View - Pure UI component for script preset configuration.
 
 This view provides a dialog for creating and editing script argument presets,
@@ -9,9 +9,7 @@ from typing import Dict, Any, List, Optional
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QLineEdit, QDialogButtonBox,
                              QComboBox, QCheckBox, QSpinBox, QDoubleSpinBox,
-                             QFormLayout, QWidget, QScrollArea, QMessageBox,
-                             QListWidget, QListWidgetItem, QSplitter,
-                             QGroupBox, QTextEdit)
+                             QFormLayout, QWidget, QScrollArea, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 
 logger = logging.getLogger('Views.PresetEditor')
@@ -123,34 +121,27 @@ class ArgumentWidget(QWidget):
 
 class PresetEditorView(QDialog):
     """
-    View for editing script presets - pure UI component.
-    
-    This view provides the interface for creating and editing script
-    argument presets with no business logic - only UI display and user input.
+    Editor for a single preset. Preset selection lives in Settings -> Script Args.
     """
-    
+
     # Signals for controller
     preset_saved = pyqtSignal(str, dict)  # preset_name, arguments
-    preset_deleted = pyqtSignal(str)  # preset_name
-    preset_selected = pyqtSignal(str)  # preset_name
-    auto_generate_requested = pyqtSignal()
-    
-    def __init__(self, script_name: str, script_args: List[Dict[str, Any]], 
-                 existing_presets: Optional[Dict[str, Dict[str, Any]]] = None,
-                 parent=None):
+
+    def __init__(self, script_name: str, script_args: List[Dict[str, Any]], parent=None,
+                 initial_name: Optional[str] = None, initial_args: Optional[Dict[str, Any]] = None):
         super().__init__(parent)
         self.script_name = script_name
         self.script_args = script_args
-        self.existing_presets = existing_presets or {}
-        self.current_preset_name = None
         self.argument_widgets = {}
-        
+        self.initial_name = initial_name
+        self.initial_args = initial_args or {}
+
         self.setWindowTitle(f"Preset Editor - {script_name}")
         self.setModal(True)
-        self.setMinimumSize(600, 400)
-        
+        self.setMinimumSize(500, 360)
+
         self.init_ui()
-        
+
         logger.info(f"PresetEditorView initialized for script: {script_name}")
     
     def init_ui(self):
@@ -158,43 +149,10 @@ class PresetEditorView(QDialog):
         layout = QVBoxLayout(self)
         
         # Header
-        header_label = QLabel(f"<b>Configure presets for:</b> {self.script_name}")
+        header_label = QLabel(f"<b>Configure preset for:</b> {self.script_name}")
         layout.addWidget(header_label)
-        
-        # Main content area with splitter
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        
-        # Left side - Preset list
-        left_widget = QWidget()
-        left_layout = QVBoxLayout(left_widget)
-        
-        left_layout.addWidget(QLabel("<b>Presets:</b>"))
-        
-        self.preset_list = QListWidget()
-        self.preset_list.itemClicked.connect(self.on_preset_selected)
-        left_layout.addWidget(self.preset_list)
-        
-        # Preset list buttons
-        list_buttons = QHBoxLayout()
-        
-        new_btn = QPushButton("New")
-        new_btn.clicked.connect(self.new_preset)
-        list_buttons.addWidget(new_btn)
-        
-        delete_btn = QPushButton("Delete")
-        delete_btn.clicked.connect(self.delete_current_preset)
-        list_buttons.addWidget(delete_btn)
-        
-        auto_gen_btn = QPushButton("Auto Generate")
-        auto_gen_btn.clicked.connect(self.auto_generate_requested.emit)
-        auto_gen_btn.setToolTip("Generate presets based on argument choices")
-        list_buttons.addWidget(auto_gen_btn)
-        
-        left_layout.addLayout(list_buttons)
-        
-        splitter.addWidget(left_widget)
-        
-        # Right side - Preset editor
+
+        # Single-preset editor
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         
@@ -236,75 +194,35 @@ class PresetEditorView(QDialog):
         save_preset_btn.clicked.connect(self.save_current_preset)
         right_layout.addWidget(save_preset_btn)
         
-        splitter.addWidget(right_widget)
-        splitter.setSizes([200, 400])
+        layout.addWidget(right_widget)
+
+        # Hide preset selection panel; selection happens in Settings -> Script Args
+        try:
+            left_widget.hide()
+            splitter.setSizes([0, 1])
+        except Exception:
+            pass
         
-        layout.addWidget(splitter)
-        
+        # Pre-fill for edit
+        if self.initial_name:
+            self.preset_name_edit.setText(self.initial_name)
+        for arg_name, arg_widget in self.argument_widgets.items():
+            if arg_name in self.initial_args:
+                arg_widget.set_value(self.initial_args[arg_name])
+
         # Dialog buttons
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
-        
-        # Load existing presets
-        self.load_presets()
     
-    def load_presets(self):
-        """Load existing presets into the list"""
-        self.preset_list.clear()
-        for preset_name in sorted(self.existing_presets.keys()):
-            self.preset_list.addItem(preset_name)
-        
-        # Select first preset if available
-        if self.preset_list.count() > 0:
-            self.preset_list.setCurrentRow(0)
-            self.on_preset_selected(self.preset_list.item(0))
-    
-    def on_preset_selected(self, item: QListWidgetItem):
-        """Handle preset selection"""
-        if not item:
-            return
-        
-        preset_name = item.text()
-        self.current_preset_name = preset_name
-        self.preset_name_edit.setText(preset_name)
-        
-        # Load preset values
-        if preset_name in self.existing_presets:
-            preset_data = self.existing_presets[preset_name]
-            for arg_name, arg_widget in self.argument_widgets.items():
-                if arg_name in preset_data:
-                    arg_widget.set_value(preset_data[arg_name])
-                else:
-                    # Clear value if not in preset
-                    arg_widget.set_value(None)
-        
-        self.preset_selected.emit(preset_name)
+    # No preset selection here; handled by Settings -> Script Args
     
     def on_argument_changed(self, arg_name: str, value: Any):
         """Handle argument value changes"""
         # Could emit signal for real-time updates if needed
         pass
     
-    def new_preset(self):
-        """Create a new preset"""
-        # Generate unique name
-        base_name = "New Preset"
-        name = base_name
-        counter = 1
-        while name in self.existing_presets:
-            counter += 1
-            name = f"{base_name} {counter}"
-        
-        # Add to list
-        self.existing_presets[name] = {}
-        self.preset_list.addItem(name)
-        
-        # Select the new preset
-        items = self.preset_list.findItems(name, Qt.MatchFlag.MatchExactly)
-        if items:
-            self.preset_list.setCurrentItem(items[0])
-            self.on_preset_selected(items[0])
+    # No local add/delete list; creation is implicit by saving
     
     def save_current_preset(self):
         """Save the current preset"""
@@ -322,33 +240,7 @@ class PresetEditorView(QDialog):
             if value is not None:  # Only save non-None values
                 arguments[arg_name] = value
         
-        # Check if renaming
-        if self.current_preset_name and self.current_preset_name != preset_name:
-            # Remove old name from list
-            items = self.preset_list.findItems(
-                self.current_preset_name, 
-                Qt.MatchFlag.MatchExactly
-            )
-            if items:
-                row = self.preset_list.row(items[0])
-                self.preset_list.takeItem(row)
-            
-            # Remove from presets dict
-            if self.current_preset_name in self.existing_presets:
-                del self.existing_presets[self.current_preset_name]
-        
-        # Save preset
-        self.existing_presets[preset_name] = arguments
-        
-        # Update list if new name
-        if not self.preset_list.findItems(preset_name, Qt.MatchFlag.MatchExactly):
-            self.preset_list.addItem(preset_name)
-        
-        # Select the saved preset
-        items = self.preset_list.findItems(preset_name, Qt.MatchFlag.MatchExactly)
-        if items:
-            self.preset_list.setCurrentItem(items[0])
-            self.current_preset_name = preset_name
+        # No local list management in single-preset editor
         
         # Emit signal
         self.preset_saved.emit(preset_name, arguments)
@@ -356,45 +248,5 @@ class PresetEditorView(QDialog):
         QMessageBox.information(self, "Preset Saved", 
                               f"Preset '{preset_name}' has been saved")
     
-    def delete_current_preset(self):
-        """Delete the currently selected preset"""
-        current_item = self.preset_list.currentItem()
-        if not current_item:
-            return
-        
-        preset_name = current_item.text()
-        
-        reply = QMessageBox.question(
-            self, "Delete Preset",
-            f"Are you sure you want to delete preset '{preset_name}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            # Remove from list
-            row = self.preset_list.row(current_item)
-            self.preset_list.takeItem(row)
-            
-            # Remove from presets dict
-            if preset_name in self.existing_presets:
-                del self.existing_presets[preset_name]
-            
-            # Clear editor
-            self.preset_name_edit.clear()
-            for arg_widget in self.argument_widgets.values():
-                arg_widget.set_value(None)
-            
-            self.current_preset_name = None
-            
-            # Emit signal
-            self.preset_deleted.emit(preset_name)
-    
-    def add_preset(self, preset_name: str, arguments: Dict[str, Any]):
-        """Add a new preset (called by controller after auto-generation)"""
-        self.existing_presets[preset_name] = arguments
-        if not self.preset_list.findItems(preset_name, Qt.MatchFlag.MatchExactly):
-            self.preset_list.addItem(preset_name)
-    
-    def get_presets(self) -> Dict[str, Dict[str, Any]]:
-        """Get all current presets"""
-        return self.existing_presets.copy()
+    # No local delete/add helpers; handled in Settings tab
+

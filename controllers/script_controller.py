@@ -5,7 +5,7 @@ This controller handles script execution requests, manages script state,
 and coordinates between script models and script-related views.
 """
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from models.script_models import ScriptCollectionModel, ScriptExecutionModel, HotkeyModel
@@ -176,15 +176,31 @@ class ScriptController(QObject):
     
     # Helper methods
     def _has_preset_configuration(self, script_name: str) -> bool:
-        """Check if a script has preset configurations"""
-        # This would check the settings for preset configurations
-        # Implementation depends on settings structure
+        """Check if a script has preset configurations (by display name or stem)."""
         script_info = self._script_collection.get_script_by_name(script_name)
         if not script_info:
             return False
-        
-        # For now, return False - this would be implemented when preset system is connected
-        return False
+        try:
+            stem = script_info.file_path.stem
+            return self._script_collection._settings.has_script_presets(stem)
+        except Exception:
+            return False
+
+    # Public helpers for presets (used by tray controller)
+    def has_presets(self, script_name: str) -> bool:
+        """Return True if the script has any saved presets."""
+        return self._has_preset_configuration(script_name)
+
+    def get_preset_names(self, script_name: str) -> List[str]:
+        """Get saved preset names for a script (by display name or stem)."""
+        script_info = self._script_collection.get_script_by_name(script_name)
+        if not script_info:
+            return []
+        try:
+            stem = script_info.file_path.stem
+            return self._script_collection._settings.get_script_preset_names(stem)
+        except Exception:
+            return []
     
     def _find_script_with_hotkey(self, hotkey: str) -> Optional[str]:
         """Find which script currently has the given hotkey assigned"""

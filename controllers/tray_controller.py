@@ -115,9 +115,8 @@ class TrayController(QObject):
             display_text += f" ({hotkey})"
         
         if script_info.arguments:
-            if self._has_choice_arguments(script_info):
-                return self._build_choice_submenu_item(script_info, display_text)
-            elif self._has_preset_configuration(script_name):
+            # Only show saved presets; no auto-discovery in tray.
+            if self._has_preset_configuration(script_name):
                 return self._build_preset_submenu_item(script_info, display_text)
             else:
                 return {
@@ -168,29 +167,68 @@ class TrayController(QObject):
         }
     
     def _build_preset_submenu_item(self, script_info, display_text: str) -> Dict[str, Any]:
-        """Build submenu for script with presets"""
-        # Placeholder: integrate with presets in settings when available
-        return {
+        """Build submenu for script with saved presets from settings"""
+        preset_names = []
+        try:
+            preset_names = self._script_controller.get_preset_names(script_info.display_name)
+        except Exception:
+            preset_names = []
+
+        if not preset_names:
+            # Fallback to configure action if somehow no presets are returned
+            return {
+                'type': 'action',
+                'text': f"{display_text} (needs config)",
+                'enabled': True,
+                'data': {
+                    'action': 'configure_script',
+                    'script_name': script_info.display_name,
+                    'script_info': script_info
+                }
+            }
+
+        submenu_items = []
+        for preset in preset_names:
+            submenu_items.append({
+                'type': 'action',
+                'text': preset,
+                'enabled': True,
+                'data': {
+                    'action': 'execute_script_with_preset',
+                    'script_name': script_info.display_name,
+                    'preset_name': preset,
+                    'script_info': script_info
+                }
+            })
+
+        # Add manage option at the bottom
+        submenu_items.append({
+            'type': 'separator'
+        })
+        submenu_items.append({
             'type': 'action',
-            'text': display_text,
+            'text': 'Manage Presets…',
             'enabled': True,
             'data': {
-                'action': 'execute_script',
+                'action': 'configure_script',
                 'script_name': script_info.display_name,
                 'script_info': script_info
             }
+        })
+
+        return {
+            'type': 'submenu',
+            'text': display_text,
+            'enabled': True,
+            'items': submenu_items
         }
-    
-    def _has_choice_arguments(self, script_info) -> bool:
-        """Check if script has choice-based arguments"""
-        if not script_info.arguments:
-            return False
-        return any(getattr(arg, 'choices', None) for arg in script_info.arguments)
     
     def _has_preset_configuration(self, script_name: str) -> bool:
         """Check if script has preset configurations"""
-        # TODO: Integrate with settings presets when available
-        return False
+        try:
+            return self._script_controller.has_presets(script_name)
+        except Exception:
+            return False
     
     # User interaction handlers (called by views)
     def handle_menu_action(self, action_data: Dict[str, Any]):
