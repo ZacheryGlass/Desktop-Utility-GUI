@@ -245,8 +245,8 @@ class PresetEditorView(QDialog):
         # Emit signal
         self.preset_saved.emit(preset_name, arguments)
         
-        QMessageBox.information(self, "Preset Saved", 
-                              f"Preset '{preset_name}' has been saved")
+        # Close dialog after saving (provides implicit feedback)
+        self.accept()
     
     # No local delete/add helpers; handled in Settings tab
 

@@ -399,8 +399,8 @@ class MVCApplication:
             self._settings_controller.preset_updated.connect(lambda *_: self.tray_controller.update_menu())
         except Exception:
             pass
-        self._settings_controller.settings_saved.connect(lambda: self._settings_view.show_info("Settings Saved", "Settings have been saved successfully"))
-        self._settings_controller.settings_reset.connect(lambda cat: self._settings_view.show_info("Settings Reset", f"{cat.title()} settings have been reset"))
+        # Removed unnecessary confirmation popups for settings_saved and settings_reset
+        # Only keep error messages which are important
         self._settings_controller.error_occurred.connect(self._settings_view.show_error)
 
         # Also refresh the tray menu when script list metadata changes (e.g., custom names)
