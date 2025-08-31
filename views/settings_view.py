@@ -442,20 +442,21 @@ class SettingsView(QDialog):
             action_btn.setMaximumHeight(28)
             action_btn.setStyleSheet("QPushButton { padding: 2px 8px; }")
 
+            name_key = script.get('original_display_name', script['display_name'])
             if script['is_external']:
                 # External: Remove script
                 action_btn.setText("Remove")
                 action_btn.setToolTip(f"Remove external script: {script['display_name']}")
                 action_btn.clicked.connect(
-                    lambda checked, s=script.get('original_display_name', script['display_name']): self.external_script_remove_requested.emit(s)
+                    lambda checked, s=name_key: self._on_action_clicked(s, is_external=True)
                 )
             else:
-                # Built-in: Toggle disable/enable
+                # Built-in: Toggle disable/enable (determine current state at click time)
                 is_disabled = script['is_disabled']
                 action_btn.setText("Enable" if is_disabled else "Disable")
                 action_btn.setToolTip("Enable this script" if is_disabled else "Disable this script")
                 action_btn.clicked.connect(
-                    lambda checked, s=script.get('original_display_name', script['display_name']), en=script['is_disabled']: self.script_toggled.emit(s, not en)
+                    lambda checked, s=name_key: self._on_action_clicked(s, is_external=False)
                 )
             self.script_table.setCellWidget(row, 0, action_btn)
 
@@ -532,6 +533,20 @@ class SettingsView(QDialog):
         hotkey_btn = self.script_table.cellWidget(row, 3)
         if isinstance(hotkey_btn, QPushButton):
             hotkey_btn.setEnabled(not disabled)
+
+    def _on_action_clicked(self, name_key: str, is_external: bool):
+        """Handle the action button: remove external or toggle built-in enable/disable."""
+        if is_external:
+            self.external_script_remove_requested.emit(name_key)
+            return
+        # Built-in: look up current disabled state and toggle
+        current = None
+        for s in self._script_data:
+            if s.get('original_display_name', s.get('display_name')) == name_key:
+                current = s
+                break
+        current_disabled = bool(current.get('is_disabled', False)) if current else False
+        self.script_toggled.emit(name_key, not current_disabled)
     
     def _update_preset_script_combo(self):
         """Update the script combo box in presets tab"""

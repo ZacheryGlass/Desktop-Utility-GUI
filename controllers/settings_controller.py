@@ -299,7 +299,25 @@ class SettingsController(QObject):
         logger.info(f"Removing external script: {script_name}")
         
         try:
+            # Capture stem for hotkey removal before removal
+            stem = None
+            try:
+                info = self._script_controller.get_script_by_name(script_name)
+                if info and hasattr(info, 'file_path'):
+                    stem = info.file_path.stem
+            except Exception:
+                pass
+
             self._script_controller.remove_external_script(script_name)
+
+            # Clear hotkey if one was assigned to this script
+            if stem:
+                try:
+                    if self._script_controller.get_script_hotkey(stem):
+                        self._script_controller.remove_script_hotkey(stem)
+                        logger.info(f"Cleared hotkey for removed external script: {stem}")
+                except Exception as e:
+                    logger.warning(f"Failed clearing hotkey for removed external script {stem}: {e}")
             
             # Refresh script list
             self.script_list_updated.emit(self._load_script_configurations())
