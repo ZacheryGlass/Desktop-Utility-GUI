@@ -70,7 +70,7 @@ class SettingsView(QDialog):
         # UI components
         self.tab_widget = None
         self.script_table = None
-        self.preset_list = None
+        self.preset_table = None
         
         # Checkboxes for settings
         self.run_on_startup_checkbox = None
@@ -280,9 +280,38 @@ class SettingsView(QDialog):
         script_layout.addStretch()
         layout.addLayout(script_layout)
         
-        # Presets list
-        self.preset_list = QListWidget()
-        layout.addWidget(self.preset_list)
+        # Presets table (styled like Scripts tab)
+        self.preset_table = QTableWidget()
+        self.preset_table.setColumnCount(3)
+        self.preset_table.setHorizontalHeaderLabels([
+            "ACTION", "PRESET NAME", "ARGUMENTS"
+        ])
+
+        # Configure table for consistent look
+        self.preset_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.preset_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.preset_table.setAlternatingRowColors(True)
+        self.preset_table.verticalHeader().setVisible(False)
+        self.preset_table.setShowGrid(True)
+        self.preset_table.setWordWrap(False)
+
+        # Column sizing similar to Scripts tab
+        p_header = self.preset_table.horizontalHeader()
+        p_header.setStretchLastSection(False)
+        p_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)    # ACTION
+        p_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # PRESET NAME
+        p_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # ARGUMENTS
+        self.preset_table.setColumnWidth(0, 160)  # Room for Edit/Delete buttons
+        try:
+            p_header.resizeSection(1, 240)
+            p_header.resizeSection(2, 420)
+        except Exception:
+            pass
+
+        # Double-click to edit preset
+        self.preset_table.cellDoubleClicked.connect(lambda r, c: self._on_edit_preset())
+
+        layout.addWidget(self.preset_table)
         
         # Buttons
         button_layout = QHBoxLayout()
@@ -292,16 +321,8 @@ class SettingsView(QDialog):
         add_preset_btn.clicked.connect(self._on_add_preset)
         button_layout.addWidget(add_preset_btn)
         
-        edit_preset_btn = QPushButton("Edit...")
-        edit_preset_btn.clicked.connect(self._on_edit_preset)
-        button_layout.addWidget(edit_preset_btn)
-        
-        delete_preset_btn = QPushButton("Delete")
-        delete_preset_btn.clicked.connect(self._on_delete_preset)
-        button_layout.addWidget(delete_preset_btn)
-        
         button_layout.addStretch()
-        
+
         auto_generate_btn = QPushButton("Auto-Generate")
         auto_generate_btn.clicked.connect(self._on_auto_generate_presets)
         auto_generate_btn.setToolTip("Automatically generate presets from script arguments")
@@ -421,7 +442,7 @@ class SettingsView(QDialog):
         
         # If this is the currently selected script, update the list
         if self.preset_script_combo.currentText() == script_name:
-            self._refresh_preset_list(presets)
+            self._refresh_preset_table(presets)
 
     def set_all_presets(self, all_presets: Dict[str, Dict[str, Any]]):
         """Replace all preset data and refresh the presets tab."""
@@ -429,9 +450,10 @@ class SettingsView(QDialog):
         self._update_preset_script_combo()
         current = self.preset_script_combo.currentText()
         if current and current in self._preset_data:
-            self._refresh_preset_list(self._preset_data[current])
+            self._refresh_preset_table(self._preset_data[current])
         else:
-            self.preset_list.clear()
+            # Clear table when nothing selected
+            self._refresh_preset_table({})
     
     def show_error(self, title: str, message: str):
         """Show an error message"""
@@ -578,14 +600,64 @@ class SettingsView(QDialog):
             if index >= 0:
                 self.preset_script_combo.setCurrentIndex(index)
     
-    def _refresh_preset_list(self, presets: Dict[str, Any]):
-        """Refresh the preset list display"""
-        self.preset_list.clear()
-        
-        for preset_name, args in presets.items():
-            args_str = ', '.join(f"{k}={v}" for k, v in args.items())
-            item_text = f"{preset_name}: {args_str}"
-            self.preset_list.addItem(item_text)
+    def _refresh_preset_table(self, presets: Dict[str, Any]):
+        """Refresh the presets table display to mirror Scripts tab styling."""
+        # Normalize None to empty dict
+        presets = presets or {}
+
+        # Reset contents
+        self.preset_table.clearContents()
+        rows = len(presets)
+        self.preset_table.setRowCount(rows)
+
+        # Stable ordering by preset name
+        for row, preset_name in enumerate(sorted(presets.keys(), key=lambda s: s.lower())):
+            args = presets.get(preset_name, {}) or {}
+
+            # ACTIONS cell: Edit + Delete buttons
+            actions_widget = QWidget()
+            actions_layout = QHBoxLayout(actions_widget)
+            actions_layout.setContentsMargins(2, 2, 2, 2)
+            actions_layout.setSpacing(6)
+
+            edit_btn = QPushButton("Edit")
+            edit_btn.setMaximumHeight(28)
+            edit_btn.setStyleSheet("QPushButton { padding: 2px 8px; }")
+            edit_btn.setToolTip(f"Edit preset '{preset_name}'")
+            edit_btn.clicked.connect(lambda checked=False, p=preset_name: self._on_edit_preset_named(p))
+            actions_layout.addWidget(edit_btn)
+
+            del_btn = QPushButton("Delete")
+            del_btn.setMaximumHeight(28)
+            del_btn.setStyleSheet("QPushButton { padding: 2px 8px; }")
+            del_btn.setToolTip(f"Delete preset '{preset_name}'")
+            del_btn.clicked.connect(lambda checked=False, p=preset_name: self._on_delete_preset_named(p))
+            actions_layout.addWidget(del_btn)
+
+            actions_layout.addStretch()
+            self.preset_table.setCellWidget(row, 0, actions_widget)
+
+            # PRESET NAME cell
+            name_item = QTableWidgetItem(preset_name)
+            name_item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+            name_item.setToolTip(f"Preset: {preset_name}")
+            # Store raw preset name for retrieval
+            name_item.setData(Qt.ItemDataRole.UserRole, preset_name)
+            self.preset_table.setItem(row, 1, name_item)
+
+            # ARGUMENTS cell (compact, tooltip shows full list)
+            args_pairs = [f"{k}={v}" for k, v in args.items()]
+            args_str = ", ".join(args_pairs)
+            args_item = QTableWidgetItem(args_str)
+            args_item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+            if args_pairs:
+                args_item.setToolTip("\n".join(args_pairs))
+            self.preset_table.setItem(row, 2, args_item)
+
+        # Consistent row height
+        self.preset_table.resizeRowsToContents()
+        for r in range(self.preset_table.rowCount()):
+            self.preset_table.setRowHeight(r, 32)
     
     # UI event handlers
     
@@ -622,9 +694,9 @@ class SettingsView(QDialog):
     def _on_preset_script_changed(self, script_name: str):
         """Handle preset script selection change"""
         if script_name and script_name in self._preset_data:
-            self._refresh_preset_list(self._preset_data[script_name])
+            self._refresh_preset_table(self._preset_data[script_name])
         else:
-            self.preset_list.clear()
+            self._refresh_preset_table({})
     
     def _on_add_preset(self):
         """Handle add preset button"""
@@ -634,33 +706,57 @@ class SettingsView(QDialog):
     
     def _on_edit_preset(self):
         """Handle edit preset button"""
-        current_item = self.preset_list.currentItem()
-        if current_item:
-            # Extract preset name from the display text
-            preset_text = current_item.text()
-            preset_name = preset_text.split(':')[0]
-            script_name = self.preset_script_combo.currentText()
-            
-            # Emit signal for editing specific preset
-            self.edit_preset_requested.emit(script_name, preset_name)
+        # Prefer selected row; fallback to first row
+        row = self.preset_table.currentRow()
+        if row < 0 and self.preset_table.rowCount() > 0:
+            row = 0
+        if row >= 0:
+            name_item = self.preset_table.item(row, 1)
+            if isinstance(name_item, QTableWidgetItem):
+                preset_name = name_item.data(Qt.ItemDataRole.UserRole) or name_item.text()
+                script_name = self.preset_script_combo.currentText()
+                self.edit_preset_requested.emit(script_name, preset_name)
     
     def _on_delete_preset(self):
         """Handle delete preset button"""
-        current_item = self.preset_list.currentItem()
-        if current_item:
-            preset_text = current_item.text()
-            preset_name = preset_text.split(':')[0]
-            script_name = self.preset_script_combo.currentText()
-            
-            reply = QMessageBox.question(
-                self,
-                "Delete Preset",
-                f"Delete preset '{preset_name}'?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            
-            if reply == QMessageBox.StandardButton.Yes:
-                self.preset_deleted.emit(script_name, preset_name)
+        # Delete the currently selected preset
+        row = self.preset_table.currentRow()
+        if row < 0 and self.preset_table.rowCount() > 0:
+            row = 0
+        if row >= 0:
+            name_item = self.preset_table.item(row, 1)
+            if isinstance(name_item, QTableWidgetItem):
+                preset_name = name_item.data(Qt.ItemDataRole.UserRole) or name_item.text()
+                script_name = self.preset_script_combo.currentText()
+                
+                reply = QMessageBox.question(
+                    self,
+                    "Delete Preset",
+                    f"Delete preset '{preset_name}'?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.preset_deleted.emit(script_name, preset_name)
+
+    # Named action helpers for per-row buttons
+    def _on_edit_preset_named(self, preset_name: str):
+        script_name = self.preset_script_combo.currentText()
+        if script_name and preset_name:
+            self.edit_preset_requested.emit(script_name, preset_name)
+
+    def _on_delete_preset_named(self, preset_name: str):
+        script_name = self.preset_script_combo.currentText()
+        if not (script_name and preset_name):
+            return
+        reply = QMessageBox.question(
+            self,
+            "Delete Preset",
+            f"Delete preset '{preset_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.preset_deleted.emit(script_name, preset_name)
     
     def _on_auto_generate_presets(self):
         """Handle auto-generate presets button"""
