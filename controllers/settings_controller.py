@@ -172,10 +172,7 @@ class SettingsController(QObject):
         logger.info(f"Setting script timeout: {seconds} seconds")
         self._app_model.set_script_timeout_seconds(seconds)
     
-    def set_status_refresh_interval(self, seconds: int):
-        """Set status refresh interval"""
-        logger.info(f"Setting status refresh interval: {seconds} seconds")
-        self._app_model.set_status_refresh_seconds(seconds)
+    # Removed status refresh interval configuration (now fixed at 5s)
     
     # Script management methods
     def toggle_script(self, script_name: str, enabled: bool):

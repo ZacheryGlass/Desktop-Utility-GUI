@@ -161,25 +161,20 @@ class ApplicationStateModel(QObject):
     def get_execution_settings(self) -> dict:
         """Get all execution-related settings"""
         return {
-            'script_timeout_seconds': self._settings.get('execution/script_timeout_seconds', 30),
-            'status_refresh_seconds': self._settings.get('execution/status_refresh_seconds', 5)
+            'script_timeout_seconds': self._settings.get('execution/script_timeout_seconds', 30)
         }
     
     def set_script_timeout_seconds(self, timeout: int):
         """Set script execution timeout in seconds"""
         self._settings.set('execution/script_timeout_seconds', timeout)
     
-    def set_status_refresh_seconds(self, interval: int):
-        """Set status refresh interval in seconds"""
-        self._settings.set('execution/status_refresh_seconds', interval)
+    # Removed status refresh setting (refresh is fixed at 5s in execution model)
     
     def get_script_timeout_seconds(self) -> int:
         """Get script execution timeout"""
         return self._settings.get('execution/script_timeout_seconds', 30)
     
-    def get_status_refresh_seconds(self) -> int:
-        """Get status refresh interval"""
-        return self._settings.get('execution/status_refresh_seconds', 5)
+    # Removed getter for status refresh (not configurable)
     
     # Window settings
     def save_window_geometry(self, geometry: bytes):
