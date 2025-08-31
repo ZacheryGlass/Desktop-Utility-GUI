@@ -87,19 +87,28 @@ class TrayController(QObject):
             })
         else:
             for script_info in scripts:
-                script_name = script_info.display_name
-                status = self._script_controller.get_script_status(script_name)
-                hotkey = self._script_controller.get_script_hotkey(script_name)
-                menu_items.append(self._build_script_menu_item(script_info, status, hotkey))
+                # Use effective display name (respects custom names) for UI text
+                effective_name = self._script_controller._script_collection.get_script_display_name(script_info)
+                # Use original analyzer display name for model lookups
+                original_name = script_info.display_name
+                # Status by original name
+                status = self._script_controller.get_script_status(original_name)
+                # Hotkey lookup by file stem identifier
+                stem = script_info.file_path.stem if hasattr(script_info, 'file_path') else None
+                hotkey = self._script_controller.get_script_hotkey(stem) if stem else None
+                menu_items.append(self._build_script_menu_item(script_info, effective_name, status, hotkey))
         return {
             'title': 'Desktop Utilities',
             'items': menu_items
         }
-    
-    def _build_script_menu_item(self, script_info, status: str, hotkey: str = None) -> Dict[str, Any]:
-        """Build a menu item for a specific script"""
-        script_name = script_info.display_name
-        display_text = script_name
+
+    def _build_script_menu_item(self, script_info, display_text: str, status: str, hotkey: str = None) -> Dict[str, Any]:
+        """Build a menu item for a specific script.
+
+        display_text is the effective (customized) name, while script_info.display_name is the
+        original identifier used by models.
+        """
+        script_name = script_info.display_name  # original name for actions
         if status and status != "Ready":
             display_text += f" [{status}]"
         if hotkey:
@@ -235,4 +244,3 @@ class TrayController(QObject):
         self._script_controller.script_list_updated.connect(lambda scripts: self.update_menu())
         self._script_controller.script_status_updated.connect(lambda name, status: self.update_menu())
         logger.debug("Tray controller model connections setup complete")
-
