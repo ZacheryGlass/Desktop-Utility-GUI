@@ -207,9 +207,9 @@ class SettingsView(QDialog):
         
         # Scripts table
         self.script_table = QTableWidget()
-        self.script_table.setColumnCount(5)
+        self.script_table.setColumnCount(4)
         self.script_table.setHorizontalHeaderLabels([
-            "STATUS", "DISPLAY NAME", "FILENAME", "HOTKEY", "ACTIONS"
+            "ACTION", "DISPLAY NAME", "FILENAME", "HOTKEY"
         ])
         
         # Configure table
@@ -223,16 +223,14 @@ class SettingsView(QDialog):
         # Set up proper column sizing
         header = self.script_table.horizontalHeader()
         header.setStretchLastSection(False)  # We control sizes explicitly
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)      # Status checkbox - fixed width
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)      # Action button column
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)    # Display name stretches
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)    # Filename stretches (balanced with display name)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)    # Filename stretches (balanced)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)      # Hotkey - fixed width
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)      # Actions - fixed width
         
         # Set proper column widths to prevent truncation and overlapping
-        self.script_table.setColumnWidth(0, 80)    # STATUS - width for checkbox
+        self.script_table.setColumnWidth(0, 110)   # ACTION - button width
         self.script_table.setColumnWidth(3, 200)   # HOTKEY - show full hotkeys
-        self.script_table.setColumnWidth(4, 120)   # ACTIONS - slightly wider
 
         # Provide initial proportions for stretch columns
         try:
@@ -439,20 +437,27 @@ class SettingsView(QDialog):
         self.script_table.setRowCount(len(self._script_data))
         
         for row, script in enumerate(self._script_data):
-            # Status (enabled/disabled) - column 0
-            status_container = QWidget()
-            status_layout = QHBoxLayout(status_container)
-            status_layout.setContentsMargins(2, 2, 2, 2)
-            status_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            # Action button (disable or remove) - column 0
+            action_btn = QPushButton()
+            action_btn.setMaximumHeight(28)
+            action_btn.setStyleSheet("QPushButton { padding: 2px 8px; }")
 
-            status_checkbox = QCheckBox()
-            status_checkbox.setChecked(not script['is_disabled'])
-            status_checkbox.toggled.connect(
-                lambda checked, s=script.get('original_display_name', script['display_name']): self.script_toggled.emit(s, checked)
-            )
-            status_layout.addWidget(status_checkbox)
-            status_container.setFixedWidth(70)
-            self.script_table.setCellWidget(row, 0, status_container)
+            if script['is_external']:
+                # External: Remove script
+                action_btn.setText("Remove")
+                action_btn.setToolTip(f"Remove external script: {script['display_name']}")
+                action_btn.clicked.connect(
+                    lambda checked, s=script.get('original_display_name', script['display_name']): self.external_script_remove_requested.emit(s)
+                )
+            else:
+                # Built-in: Toggle disable/enable
+                is_disabled = script['is_disabled']
+                action_btn.setText("Enable" if is_disabled else "Disable")
+                action_btn.setToolTip("Enable this script" if is_disabled else "Disable this script")
+                action_btn.clicked.connect(
+                    lambda checked, s=script.get('original_display_name', script['display_name']), en=script['is_disabled']: self.script_toggled.emit(s, not en)
+                )
+            self.script_table.setCellWidget(row, 0, action_btn)
 
             # Display Name (customizable) - column 1
             custom_name = script.get('custom_name', '')
@@ -501,29 +506,32 @@ class SettingsView(QDialog):
                 lambda checked, s=script['name']: self.hotkey_configuration_requested.emit(s)
             )
             self.script_table.setCellWidget(row, 3, hotkey_btn)
-            
-            # Actions
-            if script['is_external']:
-                remove_btn = QPushButton("Remove")
-                remove_btn.setMaximumHeight(28)  # Consistent height
-                remove_btn.setStyleSheet("QPushButton { padding: 2px 4px; }")
-                remove_btn.setToolTip(f"Remove external script: {script['display_name']}")
-                remove_btn.clicked.connect(
-                    lambda checked, s=script.get('original_display_name', script['display_name']): self.external_script_remove_requested.emit(s)
-                )
-                self.script_table.setCellWidget(row, 4, remove_btn)
-            else:
-                # For built-in scripts, show a disabled placeholder or leave empty
-                placeholder = QLabel("Built-in")
-                placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                placeholder.setStyleSheet("color: #999;")
-                self.script_table.setCellWidget(row, 4, placeholder)
         
         # Set consistent row height and ensure proper layout
         self.script_table.resizeRowsToContents()
         # Add a bit of padding to rows
         for row in range(self.script_table.rowCount()):
             self.script_table.setRowHeight(row, 32)  # Fixed height for consistency
+
+        # Apply disabled styling for built-in scripts
+        for row, script in enumerate(self._script_data):
+            self._apply_row_disabled_style(row, script.get('is_disabled', False))
+
+    def _apply_row_disabled_style(self, row: int, disabled: bool):
+        """Gray out and disable interactive widgets for disabled scripts (built-in only)."""
+        # Action button stays enabled (to allow re-enabling)
+        # Display name button
+        display_btn = self.script_table.cellWidget(row, 1)
+        if isinstance(display_btn, QPushButton):
+            display_btn.setEnabled(not disabled)
+        # Filename item
+        file_item = self.script_table.item(row, 2)
+        if isinstance(file_item, QTableWidgetItem):
+            file_item.setForeground(Qt.GlobalColor.gray if disabled else Qt.GlobalColor.black)
+        # Hotkey button
+        hotkey_btn = self.script_table.cellWidget(row, 3)
+        if isinstance(hotkey_btn, QPushButton):
+            hotkey_btn.setEnabled(not disabled)
     
     def _update_preset_script_combo(self):
         """Update the script combo box in presets tab"""
