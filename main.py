@@ -385,6 +385,12 @@ class MVCApplication:
         self._settings_controller.settings_saved.connect(lambda: self._settings_view.show_info("Settings Saved", "Settings have been saved successfully"))
         self._settings_controller.settings_reset.connect(lambda cat: self._settings_view.show_info("Settings Reset", f"{cat.title()} settings have been reset"))
         self._settings_controller.error_occurred.connect(self._settings_view.show_error)
+
+        # Also refresh the tray menu when script list metadata changes (e.g., custom names)
+        try:
+            self._settings_controller.script_list_updated.connect(lambda *_: self.tray_controller.update_menu())
+        except Exception:
+            pass
         
         # Load current settings
         self._settings_controller.load_all_settings()
