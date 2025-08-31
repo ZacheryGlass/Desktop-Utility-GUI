@@ -91,16 +91,20 @@ class SettingsController(QObject):
         for script_info in all_scripts:
             # Use the file stem as the script identifier for settings/hotkeys
             stem_name = script_info.file_path.stem
-            display_name = self._script_collection.get_script_display_name(script_info)
+            # Effective name (custom applied) for display to users
+            effective_display_name = self._script_collection.get_script_display_name(script_info)
+            # Original base display name from analyzer (stable identifier for model APIs)
+            original_display_name = script_info.display_name
 
             config = {
                 'name': stem_name,  # file stem identifier for settings/hotkeys
-                'display_name': display_name,
-                'is_external': self._script_collection.is_external_script(display_name),
-                'is_disabled': self._script_collection.is_script_disabled(display_name),
+                'display_name': effective_display_name,
+                'original_display_name': original_display_name,
+                'is_external': self._script_collection.is_external_script(original_display_name),
+                'is_disabled': self._script_collection.is_script_disabled(original_display_name),
                 'hotkey': self._hotkey_model.get_hotkey_for_script(stem_name),
-                # Custom names are keyed by original display name
-                'custom_name': self._settings_manager.get_custom_name(display_name),
+                # Custom names are stored against the original display name
+                'custom_name': self._settings_manager.get_custom_name(original_display_name),
                 'has_arguments': bool(script_info.arguments),
                 'arguments': script_info.arguments if script_info.arguments else [],
                 'file_path': str(script_info.file_path)

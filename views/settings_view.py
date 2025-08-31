@@ -461,7 +461,7 @@ class SettingsView(QDialog):
             status_checkbox = QCheckBox()
             status_checkbox.setChecked(not script['is_disabled'])
             status_checkbox.toggled.connect(
-                lambda checked, s=script['display_name']: self.script_toggled.emit(s, checked)
+                lambda checked, s=script.get('original_display_name', script['display_name']): self.script_toggled.emit(s, checked)
             )
             status_layout.addWidget(status_checkbox)
             status_container.setFixedWidth(70)
@@ -501,7 +501,7 @@ class SettingsView(QDialog):
                 remove_btn.setStyleSheet("QPushButton { padding: 2px 4px; }")
                 remove_btn.setToolTip(f"Remove external script: {script['display_name']}")
                 remove_btn.clicked.connect(
-                    lambda checked, s=script['display_name']: self.external_script_remove_requested.emit(s)
+                    lambda checked, s=script.get('original_display_name', script['display_name']): self.external_script_remove_requested.emit(s)
                 )
                 self.script_table.setCellWidget(row, 4, remove_btn)
             else:
