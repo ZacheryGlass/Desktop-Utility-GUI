@@ -80,10 +80,24 @@ class ScriptCollectionModel(QObject):
         return self._available_scripts.copy()
     
     def get_script_by_name(self, name: str) -> Optional[ScriptInfo]:
-        """Get script info by display name"""
+        """Get script info by name.
+
+        Accepts either the display name (e.g., "Display Toggle") or the file stem
+        identifier used for hotkeys and settings (e.g., "display_toggle").
+        """
+        # First, try exact display name match
         for script in self._all_scripts:
             if script.display_name == name:
                 return script
+
+        # Fallback: try file stem match (hotkey/settings use stems)
+        lname = (name or "").strip().lower()
+        for script in self._all_scripts:
+            try:
+                if script.file_path.stem.lower() == lname:
+                    return script
+            except Exception:
+                pass
         return None
     
     def is_script_disabled(self, script_name: str) -> bool:
