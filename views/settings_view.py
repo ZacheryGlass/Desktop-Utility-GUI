@@ -209,7 +209,7 @@ class SettingsView(QDialog):
         self.script_table = QTableWidget()
         self.script_table.setColumnCount(5)
         self.script_table.setHorizontalHeaderLabels([
-            "DISPLAY NAME", "STATUS", "HOTKEY", "FILENAME", "ACTIONS"
+            "STATUS", "DISPLAY NAME", "FILENAME", "HOTKEY", "ACTIONS"
         ])
         
         # Configure table
@@ -223,17 +223,17 @@ class SettingsView(QDialog):
         # Set up proper column sizing
         header = self.script_table.horizontalHeader()
         header.setStretchLastSection(False)  # We control sizes explicitly
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Display name stretches
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Status checkbox - fixed width
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)  # Hotkey - fixed width
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)  # Filename - fixed width
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)  # Actions - fixed width
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)      # Status checkbox - fixed width
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)    # Display name stretches
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)      # Filename - fixed width
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)      # Hotkey - fixed width
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)      # Actions - fixed width
         
         # Set proper column widths to prevent truncation and overlapping
-        self.script_table.setColumnWidth(1, 80)   # STATUS - width for checkbox
-        self.script_table.setColumnWidth(2, 200)  # HOTKEY - show full hotkeys
-        self.script_table.setColumnWidth(3, 160)  # FILENAME - narrower
-        self.script_table.setColumnWidth(4, 120)  # ACTIONS - slightly wider
+        self.script_table.setColumnWidth(0, 80)    # STATUS - width for checkbox
+        self.script_table.setColumnWidth(2, 160)   # FILENAME - narrower
+        self.script_table.setColumnWidth(3, 200)   # HOTKEY - show full hotkeys
+        self.script_table.setColumnWidth(4, 120)   # ACTIONS - slightly wider
         
         layout.addWidget(self.script_table)
         
@@ -390,7 +390,7 @@ class SettingsView(QDialog):
             return
 
         # Update the HOTKEY cell's button text and tooltip
-        btn = self.script_table.cellWidget(row_index, 2)
+        btn = self.script_table.cellWidget(row_index, 3)
         if isinstance(btn, QPushButton):
             new_text = hotkey if hotkey else 'Click to set'
             btn.setText(new_text)
@@ -433,7 +433,22 @@ class SettingsView(QDialog):
         self.script_table.setRowCount(len(self._script_data))
         
         for row, script in enumerate(self._script_data):
-            # Display Name (customizable)
+            # Status (enabled/disabled) - column 0
+            status_container = QWidget()
+            status_layout = QHBoxLayout(status_container)
+            status_layout.setContentsMargins(2, 2, 2, 2)
+            status_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            status_checkbox = QCheckBox()
+            status_checkbox.setChecked(not script['is_disabled'])
+            status_checkbox.toggled.connect(
+                lambda checked, s=script.get('original_display_name', script['display_name']): self.script_toggled.emit(s, checked)
+            )
+            status_layout.addWidget(status_checkbox)
+            status_container.setFixedWidth(70)
+            self.script_table.setCellWidget(row, 0, status_container)
+
+            # Display Name (customizable) - column 1
             custom_name = script.get('custom_name', '')
             custom_btn_text = custom_name if custom_name else 'Click to set'
             custom_name_btn = QPushButton(custom_btn_text)
@@ -445,9 +460,9 @@ class SettingsView(QDialog):
             custom_name_btn.clicked.connect(
                 lambda checked, s=script['name']: self._on_set_custom_name(s)
             )
-            self.script_table.setCellWidget(row, 0, custom_name_btn)
+            self.script_table.setCellWidget(row, 1, custom_name_btn)
 
-            # Filename (explicitly show the underlying file name)
+            # Filename (explicitly show the underlying file name) - column 2
             file_name = script.get('file_path')
             try:
                 from pathlib import Path
@@ -464,22 +479,7 @@ class SettingsView(QDialog):
                 tooltip_parts.append(f"Display: {script['display_name']}")
             if tooltip_parts:
                 file_item.setToolTip("\n".join(tooltip_parts))
-            self.script_table.setItem(row, 3, file_item)
-            
-            # Status (enabled/disabled) - center the checkbox, constrain width
-            status_container = QWidget()
-            status_layout = QHBoxLayout(status_container)
-            status_layout.setContentsMargins(2, 2, 2, 2)  # Small margins to prevent overflow
-            status_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-            status_checkbox = QCheckBox()
-            status_checkbox.setChecked(not script['is_disabled'])
-            status_checkbox.toggled.connect(
-                lambda checked, s=script.get('original_display_name', script['display_name']): self.script_toggled.emit(s, checked)
-            )
-            status_layout.addWidget(status_checkbox)
-            status_container.setFixedWidth(70)
-            self.script_table.setCellWidget(row, 1, status_container)
+            self.script_table.setItem(row, 2, file_item)
             
             # Hotkey - show full hotkey text with proper sizing
             raw_hotkey = script.get('hotkey', '')
@@ -494,7 +494,7 @@ class SettingsView(QDialog):
             hotkey_btn.clicked.connect(
                 lambda checked, s=script['name']: self.hotkey_configuration_requested.emit(s)
             )
-            self.script_table.setCellWidget(row, 2, hotkey_btn)
+            self.script_table.setCellWidget(row, 3, hotkey_btn)
             
             # Actions
             if script['is_external']:
