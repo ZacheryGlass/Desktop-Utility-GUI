@@ -309,7 +309,17 @@ class SettingsView(QDialog):
         
         layout.addLayout(button_layout)
         
-        self.tab_widget.addTab(tab, "Script Args")
+        self.tab_widget.addTab(tab, "Presets")
+
+    def select_presets_tab(self):
+        """Switch to the Presets tab."""
+        try:
+            for i in range(self.tab_widget.count()):
+                if self.tab_widget.tabText(i) == "Presets":
+                    self.tab_widget.setCurrentIndex(i)
+                    break
+        except Exception:
+            pass
     
     def _create_reset_tab(self):
         """Create the Reset settings tab"""

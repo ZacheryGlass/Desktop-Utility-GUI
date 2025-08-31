@@ -320,6 +320,11 @@ class MVCApplication:
                         self._settings_view.windowState() & ~Qt.WindowState.WindowMinimized
                     )
                     self._settings_view.show()
+                    # Ensure Presets tab is focused when reopening via tray
+                    try:
+                        self._settings_view.select_presets_tab()
+                    except Exception:
+                        pass
                     self._settings_view.raise_()
                     self._settings_view.activateWindow()
             except Exception:
@@ -411,6 +416,12 @@ class MVCApplication:
         
         # Load current settings
         self._settings_controller.load_all_settings()
+
+        # Open with the Presets tab focused for quicker configuration
+        try:
+            self._settings_view.select_presets_tab()
+        except Exception:
+            pass
         
         # Show dialog
         try:
@@ -468,9 +479,17 @@ class MVCApplication:
         )
         
         # Connect signals
-        preset_view.preset_saved.connect(
-            lambda n, a: settings_controller.save_script_preset(script_info.file_path.stem, n, a)
-        )
+        def _save_or_rename_preset(new_name, args, _old_name=preset_name, _stem=script_info.file_path.stem):
+            try:
+                if _old_name and new_name != _old_name:
+                    # Rename: delete old then save new
+                    settings_controller.delete_script_preset(_stem, _old_name)
+                settings_controller.save_script_preset(_stem, new_name, args)
+            except Exception:
+                # Let controller/view error handling surface to user
+                pass
+
+        preset_view.preset_saved.connect(_save_or_rename_preset)
         # Deletion handled from Script Args tab; editor focuses on a single preset
         
         # Show dialog
