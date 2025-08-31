@@ -209,7 +209,7 @@ class SettingsView(QDialog):
         self.script_table = QTableWidget()
         self.script_table.setColumnCount(5)
         self.script_table.setHorizontalHeaderLabels([
-            "SCRIPT", "STATUS", "HOTKEY", "CUSTOM NAME", "ACTIONS"
+            "FILENAME", "STATUS", "HOTKEY", "CUSTOM NAME", "ACTIONS"
         ])
         
         # Configure table
@@ -433,13 +433,23 @@ class SettingsView(QDialog):
         self.script_table.setRowCount(len(self._script_data))
         
         for row, script in enumerate(self._script_data):
-            # Script name - use full display name
-            name_item = QTableWidgetItem(script['display_name'])
+            # Filename (explicitly show the underlying file name)
+            file_name = script.get('file_path')
+            try:
+                from pathlib import Path
+                display_file = Path(file_name).name if file_name else script.get('name', '')
+            except Exception:
+                display_file = script.get('name', '')
+            name_item = QTableWidgetItem(display_file)
             name_item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-            if script['is_external']:
-                name_item.setToolTip(f"External script: {script.get('file_path', '')}")
-            else:
-                name_item.setToolTip(script['display_name'])
+            # Tooltip shows full path and current display name for clarity
+            tooltip_parts = []
+            if file_name:
+                tooltip_parts.append(f"Path: {file_name}")
+            if script.get('display_name'):
+                tooltip_parts.append(f"Display: {script['display_name']}")
+            if tooltip_parts:
+                name_item.setToolTip("\n".join(tooltip_parts))
             self.script_table.setItem(row, 0, name_item)
             
             # Status (enabled/disabled) - center the checkbox, constrain width

@@ -99,7 +99,8 @@ class SettingsController(QObject):
                 'is_external': self._script_collection.is_external_script(display_name),
                 'is_disabled': self._script_collection.is_script_disabled(display_name),
                 'hotkey': self._hotkey_model.get_hotkey_for_script(stem_name),
-                'custom_name': self._settings_manager.get_custom_name(stem_name),
+                # Custom names are keyed by original display name
+                'custom_name': self._settings_manager.get_custom_name(display_name),
                 'has_arguments': bool(script_info.arguments),
                 'arguments': script_info.arguments if script_info.arguments else [],
                 'file_path': str(script_info.file_path)
@@ -218,18 +219,26 @@ class SettingsController(QObject):
             self.error_occurred.emit("Hotkey Error", f"Failed to set hotkey: {str(e)}")
     
     def set_script_custom_name(self, script_name: str, custom_name: str):
-        """Set custom display name for a script"""
+        """Set custom display name for a script.
+
+        script_name is the file stem identifier. Custom names are stored against the
+        original display name, so we map stem -> display name before saving.
+        """
         logger.info(f"Setting custom name for {script_name}: {custom_name}")
-        
+
         try:
-            if custom_name and custom_name != script_name:
-                self._settings_manager.set_custom_name(script_name, custom_name)
+            # Map the file stem to the current display name
+            display_name = self._get_display_name_for_stem(script_name) or script_name
+
+            if custom_name and custom_name.strip() and custom_name != display_name:
+                self._settings_manager.set_custom_name(display_name, custom_name)
             else:
-                self._settings_manager.remove_custom_name(script_name)
-            
-            # Refresh script list
+                # Remove custom name mapping (revert to original)
+                self._settings_manager.remove_custom_name(display_name)
+
+            # Refresh script list so the view reflects updated display names
             self.script_list_updated.emit(self._load_script_configurations())
-            
+
         except Exception as e:
             logger.error(f"Error setting custom name for {script_name}: {e}")
             self.error_occurred.emit("Name Error", f"Failed to set custom name: {str(e)}")
