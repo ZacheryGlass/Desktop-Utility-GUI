@@ -77,11 +77,12 @@ class ScriptExecutor:
         logger.debug(f"Executing command: {' '.join(cmd)}")
         
         try:
+            used_timeout = self.settings.get_script_timeout_seconds() if self.settings else 30
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=self.settings.get_script_timeout_seconds() if self.settings else 30,
+                timeout=used_timeout,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             )
             
@@ -113,7 +114,7 @@ class ScriptExecutor:
         except subprocess.TimeoutExpired:
             return ExecutionResult(
                 success=False,
-                error="Script execution timed out (30 seconds)"
+                error=f"Script execution timed out ({used_timeout} seconds)"
             )
         except Exception as e:
             return ExecutionResult(

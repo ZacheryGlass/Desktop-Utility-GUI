@@ -44,7 +44,6 @@ class SettingsView(QDialog):
     
     # Execution settings
     script_timeout_changed = pyqtSignal(int)
-    status_refresh_changed = pyqtSignal(int)
     
     # Script management
     script_toggled = pyqtSignal(str, bool)  # script_name, enabled
@@ -83,7 +82,6 @@ class SettingsView(QDialog):
         
         # Spinboxes for numeric settings
         self.timeout_spinbox = None
-        self.refresh_spinbox = None
         
         # Track current data
         self._script_data = []
@@ -175,17 +173,6 @@ class SettingsView(QDialog):
         timeout_layout.addWidget(self.timeout_spinbox)
         timeout_layout.addStretch()
         execution_layout.addLayout(timeout_layout)
-        
-        # Status refresh interval
-        refresh_layout = QHBoxLayout()
-        refresh_layout.addWidget(QLabel("Status refresh interval (seconds):"))
-        self.refresh_spinbox = QSpinBox()
-        self.refresh_spinbox.setMinimum(1)
-        self.refresh_spinbox.setMaximum(60)
-        self.refresh_spinbox.valueChanged.connect(self.status_refresh_changed.emit)
-        refresh_layout.addWidget(self.refresh_spinbox)
-        refresh_layout.addStretch()
-        execution_layout.addLayout(refresh_layout)
         
         execution_group.setLayout(execution_layout)
         layout.addWidget(execution_group)
@@ -400,7 +387,6 @@ class SettingsView(QDialog):
     def update_execution_settings(self, settings: Dict[str, Any]):
         """Update execution settings display"""
         self.timeout_spinbox.setValue(settings.get('script_timeout_seconds', 30))
-        self.refresh_spinbox.setValue(settings.get('status_refresh_seconds', 5))
     
     def update_script_list(self, scripts: List[Dict[str, Any]]):
         """Update the scripts table"""

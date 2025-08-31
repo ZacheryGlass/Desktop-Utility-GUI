@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Conventional Commits
+
+We use Conventional Commits for all commit messages to keep history clear and tooling-friendly.
+
+- Format: `<type>(<scope>): <short summary>`
+- Common types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`, `perf`, `build`.
+- Optional scope: narrow area like `settings`, `executor`, `ui`.
+- Body: explain the what/why; wrap at ~72 chars.
+- Breaking changes: add a footer `BREAKING CHANGE: <description>`.
+
+Examples:
+- `feat(settings): hard-code status refresh interval and remove UI control`
+- `fix(executor): show actual timeout value in timeout error`
+- `docs(agents): note we use Conventional Commits`
+
+When a change removes or renames a user-facing option or API, include a `BREAKING CHANGE` footer describing the migration path.
+
 ## Project Overview
 
 Desktop Utility GUI is a PyQt6-based Windows system tray application that manages and executes utility scripts with global hotkey support. The application runs primarily from the system tray and provides a modular architecture for script execution.

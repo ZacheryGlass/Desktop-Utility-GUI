@@ -222,8 +222,8 @@ class ScriptExecutionModel(QObject):
         # Setup status refresh timer
         self._status_timer = QTimer()
         self._status_timer.timeout.connect(self._refresh_script_statuses)
-        refresh_interval = self._settings.get_status_refresh_seconds() * 1000
-        self._status_timer.start(refresh_interval)
+        # Hard-coded refresh interval: 5 seconds
+        self._status_timer.start(5000)
         
         logger.info("ScriptExecutionModel initialized")
     

@@ -362,7 +362,6 @@ class MVCApplication:
         self._settings_view.single_instance_changed.connect(self._settings_controller.set_single_instance)
         self._settings_view.show_script_notifications_changed.connect(self._settings_controller.set_show_script_notifications)
         self._settings_view.script_timeout_changed.connect(self._settings_controller.set_script_timeout)
-        self._settings_view.status_refresh_changed.connect(self._settings_controller.set_status_refresh_interval)
         self._settings_view.script_toggled.connect(self._settings_controller.toggle_script)
         self._settings_view.custom_name_changed.connect(self._settings_controller.set_script_custom_name)
         self._settings_view.external_script_add_requested.connect(lambda path: self._settings_controller.add_external_script(path))
