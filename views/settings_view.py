@@ -317,6 +317,11 @@ class SettingsView(QDialog):
         )
         warning.setStyleSheet("color: orange;")
         layout.addWidget(warning)
+        # Ensure clean ASCII text in case of encoding glitches in literals
+        warning.setText(
+            "Warning: Reset operations cannot be undone!\n\n"
+            "Choose what you want to reset:"
+        )
         
         # Reset buttons
         reset_all_btn = QPushButton("Reset All Settings to Defaults")
@@ -453,13 +458,15 @@ class SettingsView(QDialog):
             self.script_table.setCellWidget(row, 1, status_container)
             
             # Hotkey - show full hotkey text with proper sizing
-            hotkey_text = script.get('hotkey', '')
-            if not hotkey_text:
-                hotkey_text = 'Click to set'
+            raw_hotkey = script.get('hotkey', '')
+            hotkey_text = raw_hotkey if raw_hotkey else 'Click to set'
             hotkey_btn = QPushButton(hotkey_text)
             hotkey_btn.setMaximumHeight(28)  # Prevent button from being too tall
             hotkey_btn.setStyleSheet("QPushButton { text-align: center; padding: 2px 4px; }")
-            hotkey_btn.setToolTip(f"Current hotkey: {hotkey_text}\nClick to change")
+            if raw_hotkey:
+                hotkey_btn.setToolTip(f"Current hotkey: {raw_hotkey}\nClick to change")
+            else:
+                hotkey_btn.setToolTip("No hotkey set. Click to change")
             hotkey_btn.clicked.connect(
                 lambda checked, s=script['name']: self.hotkey_configuration_requested.emit(s)
             )

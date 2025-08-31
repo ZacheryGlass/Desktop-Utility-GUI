@@ -184,13 +184,14 @@ class TrayView(QObject):
     
     def _on_tray_activated(self, reason):
         """Handle tray icon activation"""
-        if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            # Left click - show context menu at cursor position
-            cursor_pos = QCursor.pos()
-            self.context_menu.popup(cursor_pos)
+        # Show context menu on right-click (Context) and single left-click (Trigger)
+        if reason == QSystemTrayIcon.ActivationReason.Context:
+            self.context_menu.popup(QCursor.pos())
+        elif reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self.context_menu.popup(QCursor.pos())
         elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            # Double click also shows the menu
-            self.context_menu.popup(self.tray_icon.geometry().center())
+            # Double-click: open settings (via title click signal)
+            self.title_clicked.emit()
     
     def cleanup(self):
         """Clean up resources"""

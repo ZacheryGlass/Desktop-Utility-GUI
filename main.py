@@ -87,6 +87,10 @@ class MVCApplication:
         self.main_view = None
         self.tray_view = None
         self.hotkey_manager = None
+        # Singleton settings dialog/controller
+        self._settings_view = None
+        self._settings_controller = None
+        self._settings_opening = False
         
     def initialize(self):
         """Initialize all MVC components and set up connections"""
@@ -285,63 +289,94 @@ class MVCApplication:
     def _handle_settings_request(self):
         """Handle settings dialog request"""
         self.logger.info("Settings dialog requested")
-        
+
+        # If already open or in process, focus existing dialog instead of opening another
+        if (self._settings_view is not None and self._settings_view.isVisible()) or self._settings_opening:
+            try:
+                if self._settings_view is not None:
+                    # Restore if minimized and bring to front
+                    self._settings_view.setWindowState(
+                        self._settings_view.windowState() & ~Qt.WindowState.WindowMinimized
+                    )
+                    self._settings_view.show()
+                    self._settings_view.raise_()
+                    self._settings_view.activateWindow()
+            except Exception:
+                pass
+            return
+
+        # Mark as opening to prevent rapid re-entry creating duplicates
+        self._settings_opening = True
+
         # Create settings controller
-        settings_controller = SettingsController(
+        self._settings_controller = SettingsController(
             self.app_controller.get_application_model(),
             self.script_controller,
             None  # parent must be a QObject or None
         )
-        
+
         # Create settings view
-        settings_view = SettingsView(self.main_view)
-        
+        self._settings_view = SettingsView(self.main_view)
+
+        # Ensure references are cleared when dialog closes
+        def _cleanup_settings(_=None):
+            self._settings_view = None
+            self._settings_controller = None
+
+        self._settings_view.finished.connect(_cleanup_settings)
+        self._settings_view.destroyed.connect(lambda *_: _cleanup_settings())
+
         # Wire controller to view
         # View -> Controller connections
-        settings_view.run_on_startup_changed.connect(settings_controller.set_run_on_startup)
-        settings_view.start_minimized_changed.connect(settings_controller.set_start_minimized)
-        settings_view.show_startup_notification_changed.connect(settings_controller.set_show_startup_notification)
-        settings_view.minimize_to_tray_changed.connect(settings_controller.set_minimize_to_tray)
-        settings_view.close_to_tray_changed.connect(settings_controller.set_close_to_tray)
-        settings_view.single_instance_changed.connect(settings_controller.set_single_instance)
-        settings_view.show_script_notifications_changed.connect(settings_controller.set_show_script_notifications)
-        settings_view.script_timeout_changed.connect(settings_controller.set_script_timeout)
-        settings_view.status_refresh_changed.connect(settings_controller.set_status_refresh_interval)
-        settings_view.script_toggled.connect(settings_controller.toggle_script)
-        settings_view.custom_name_changed.connect(settings_controller.set_script_custom_name)
-        settings_view.external_script_add_requested.connect(lambda path: settings_controller.add_external_script(path))
-        settings_view.external_script_remove_requested.connect(settings_controller.remove_external_script)
-        settings_view.hotkey_configuration_requested.connect(lambda s: self._handle_hotkey_config(s, settings_controller))
-        settings_view.preset_configuration_requested.connect(lambda s: self._handle_preset_editor(s, settings_controller))
-        settings_view.reset_requested.connect(settings_controller.reset_settings)
+        self._settings_view.run_on_startup_changed.connect(self._settings_controller.set_run_on_startup)
+        self._settings_view.start_minimized_changed.connect(self._settings_controller.set_start_minimized)
+        self._settings_view.show_startup_notification_changed.connect(self._settings_controller.set_show_startup_notification)
+        self._settings_view.minimize_to_tray_changed.connect(self._settings_controller.set_minimize_to_tray)
+        self._settings_view.close_to_tray_changed.connect(self._settings_controller.set_close_to_tray)
+        self._settings_view.single_instance_changed.connect(self._settings_controller.set_single_instance)
+        self._settings_view.show_script_notifications_changed.connect(self._settings_controller.set_show_script_notifications)
+        self._settings_view.script_timeout_changed.connect(self._settings_controller.set_script_timeout)
+        self._settings_view.status_refresh_changed.connect(self._settings_controller.set_status_refresh_interval)
+        self._settings_view.script_toggled.connect(self._settings_controller.toggle_script)
+        self._settings_view.custom_name_changed.connect(self._settings_controller.set_script_custom_name)
+        self._settings_view.external_script_add_requested.connect(lambda path: self._settings_controller.add_external_script(path))
+        self._settings_view.external_script_remove_requested.connect(self._settings_controller.remove_external_script)
+        self._settings_view.hotkey_configuration_requested.connect(lambda s: self._handle_hotkey_config(s, self._settings_controller))
+        self._settings_view.preset_configuration_requested.connect(lambda s: self._handle_preset_editor(s, self._settings_controller))
+        self._settings_view.reset_requested.connect(self._settings_controller.reset_settings)
         # Instant-apply: no accept/save button; models persist on change
         
         # Controller -> View connections
-        settings_controller.settings_loaded.connect(lambda data: (
-            settings_view.update_startup_settings(data.get('startup', {})),
-            settings_view.update_behavior_settings(data.get('behavior', {})),
-            settings_view.update_execution_settings(data.get('execution', {})),
-            settings_view.update_script_list(data.get('scripts', [])),
-            settings_view.set_all_presets(data.get('presets', {}))
+        self._settings_controller.settings_loaded.connect(lambda data: (
+            self._settings_view.update_startup_settings(data.get('startup', {})),
+            self._settings_view.update_behavior_settings(data.get('behavior', {})),
+            self._settings_view.update_execution_settings(data.get('execution', {})),
+            self._settings_view.update_script_list(data.get('scripts', [])),
+            self._settings_view.set_all_presets(data.get('presets', {}))
         ))
-        settings_controller.startup_settings_updated.connect(settings_view.update_startup_settings)
-        settings_controller.behavior_settings_updated.connect(settings_view.update_behavior_settings)
-        settings_controller.execution_settings_updated.connect(settings_view.update_execution_settings)
-        settings_controller.script_list_updated.connect(settings_view.update_script_list)
+        self._settings_controller.startup_settings_updated.connect(self._settings_view.update_startup_settings)
+        self._settings_controller.behavior_settings_updated.connect(self._settings_view.update_behavior_settings)
+        self._settings_controller.execution_settings_updated.connect(self._settings_view.update_execution_settings)
+        self._settings_controller.script_list_updated.connect(self._settings_view.update_script_list)
         # Update hotkeys incrementally for better UX
-        settings_controller.hotkey_updated.connect(lambda s, h: settings_view.update_script_hotkey(s, h))
-        settings_controller.preset_updated.connect(settings_view.update_preset_list)
-        settings_controller.settings_saved.connect(lambda: settings_view.show_info("Settings Saved", "Settings have been saved successfully"))
-        settings_controller.settings_reset.connect(lambda cat: settings_view.show_info("Settings Reset", f"{cat.title()} settings have been reset"))
-        settings_controller.error_occurred.connect(settings_view.show_error)
+        self._settings_controller.hotkey_updated.connect(lambda s, h: self._settings_view.update_script_hotkey(s, h))
+        self._settings_controller.preset_updated.connect(self._settings_view.update_preset_list)
+        self._settings_controller.settings_saved.connect(lambda: self._settings_view.show_info("Settings Saved", "Settings have been saved successfully"))
+        self._settings_controller.settings_reset.connect(lambda cat: self._settings_view.show_info("Settings Reset", f"{cat.title()} settings have been reset"))
+        self._settings_controller.error_occurred.connect(self._settings_view.show_error)
         
         # Load current settings
-        settings_controller.load_all_settings()
+        self._settings_controller.load_all_settings()
         
         # Show dialog
-        settings_view.exec()
-        
-        self.logger.info("Settings dialog closed")
+        try:
+            self._settings_view.exec()
+        finally:
+            self.logger.info("Settings dialog closed")
+            # Safety cleanup in case finished signal didn't fire
+            self._settings_view = None
+            self._settings_controller = None
+            self._settings_opening = False
     
     def _handle_hotkey_config(self, script_name, settings_controller):
         """Handle hotkey configuration dialog"""
