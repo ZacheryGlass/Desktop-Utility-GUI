@@ -389,6 +389,12 @@ class SettingsController(QObject):
         
         try:
             if category == 'all':
+                # Clear all hotkeys first so runtime and caches update
+                all_hotkeys = self._hotkey_model.get_all_hotkeys()
+                for script_name in list(all_hotkeys.keys()):
+                    self._script_controller.remove_script_hotkey(script_name)
+                logger.info("All hotkeys cleared prior to full reset")
+
                 # Reset all settings
                 self._settings_manager.reset_all_settings()
                 logger.info("All settings reset to defaults")

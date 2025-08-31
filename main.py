@@ -232,7 +232,7 @@ class MVCApplication:
     def _setup_hotkey_management(self):
         """Set up hotkey management system"""
         self.logger.debug("Setting up hotkey management...")
-        
+
         try:
             # Create hotkey manager
             self.hotkey_manager = HotkeyManager()
@@ -257,6 +257,14 @@ class MVCApplication:
                 
                 # Register current hotkeys
                 self._register_hotkeys()
+                
+                # Keep runtime registrations in sync with model changes
+                try:
+                    hotkey_model = self.app_controller.get_hotkey_model()
+                    # When mappings change, refresh all registrations for simplicity
+                    hotkey_model.hotkeys_changed.connect(self._refresh_hotkey_registrations)
+                except Exception as e:
+                    self.logger.warning(f"Failed to connect hotkey change sync: {e}")
             
         except Exception as e:
             self.logger.error(f"Error setting up hotkey management: {e}")
@@ -272,6 +280,19 @@ class MVCApplication:
                 
         except Exception as e:
             self.logger.error(f"Error registering hotkeys: {e}")
+
+    def _refresh_hotkey_registrations(self):
+        """Unregister all and re-register based on current mappings."""
+        try:
+            if not self.hotkey_manager:
+                return
+            # Unregister all existing hotkeys
+            self.hotkey_manager.unregister_all()
+            # Register current set from model
+            self._register_hotkeys()
+            self.logger.info("Refreshed hotkey registrations to match settings")
+        except Exception as e:
+            self.logger.error(f"Error refreshing hotkey registrations: {e}")
     
     def _initialize_view_states(self):
         """Initialize view states based on model data"""
