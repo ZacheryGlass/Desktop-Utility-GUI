@@ -225,15 +225,21 @@ class SettingsView(QDialog):
         header.setStretchLastSection(False)  # We control sizes explicitly
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)      # Status checkbox - fixed width
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)    # Display name stretches
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)      # Filename - fixed width
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)    # Filename stretches (balanced with display name)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)      # Hotkey - fixed width
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)      # Actions - fixed width
         
         # Set proper column widths to prevent truncation and overlapping
         self.script_table.setColumnWidth(0, 80)    # STATUS - width for checkbox
-        self.script_table.setColumnWidth(2, 160)   # FILENAME - narrower
         self.script_table.setColumnWidth(3, 200)   # HOTKEY - show full hotkeys
         self.script_table.setColumnWidth(4, 120)   # ACTIONS - slightly wider
+
+        # Provide initial proportions for stretch columns
+        try:
+            header.resizeSection(1, 280)  # Display name
+            header.resizeSection(2, 240)  # Filename
+        except Exception:
+            pass
         
         layout.addWidget(self.script_table)
         
