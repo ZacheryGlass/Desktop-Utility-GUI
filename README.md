@@ -1,3 +1,7 @@
+> Note: This project has moved to BindKit.
+> New repository: https://github.com/ZacheryGlass/BindKit
+> This repository is archived and no longer maintained.
+
 # Desktop Utility GUI
 
 A modular PyQt6 desktop application that runs as a system tray utility, managing and executing desktop scripts with global hotkey support and flexible execution strategies.
