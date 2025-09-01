@@ -166,7 +166,7 @@ Desktop-Utility-GUI/
 - **Included data**: 
   - `style.qss` (UI styling)
   - `scripts/` directory (utility scripts)
-- **Hidden imports**: PyQt6, pywin32, easyocr, torch, etc.
+- **Hidden imports**: PyQt6, pywin32, APScheduler, easyocr, torch, etc.
 
 ### Inno Setup Configuration (`installer.iss`)
 
@@ -225,6 +225,10 @@ Before releasing, test:
 - [ ] System tray icon appears
 - [ ] Scripts load and execute correctly
 - [ ] Hotkeys register and trigger
+- [ ] Scheduled scripts execute at correct times
+- [ ] Schedule configuration dialog works properly
+- [ ] Schedule indicators appear in tray menu
+- [ ] Schedules persist between application restarts
 - [ ] Settings persist between runs
 - [ ] Installer completes successfully
 - [ ] Uninstaller removes all files

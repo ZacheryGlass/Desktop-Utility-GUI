@@ -12,6 +12,8 @@ from PyQt6.QtWidgets import QApplication
 from models.application_model import ApplicationStateModel
 from models.script_models import ScriptCollectionModel, ScriptExecutionModel, HotkeyModel
 from models.system_models import TrayIconModel, NotificationModel, WindowStateModel
+from core.scheduler_manager import SchedulerManager
+from controllers.schedule_controller import ScheduleController
 
 logger = logging.getLogger('Controllers.App')
 
@@ -44,6 +46,16 @@ class AppController(QObject):
         self._notification_model = NotificationModel(self._app_model)
         self._window_model = WindowStateModel(self._app_model)
         
+        # Initialize scheduler
+        from core.settings import SettingsManager
+        self._settings = SettingsManager()
+        self._scheduler_manager = SchedulerManager(self._script_execution, self._settings)
+        self._schedule_controller = ScheduleController(
+            self._scheduler_manager, 
+            self._script_execution,
+            self._settings
+        )
+        
         # Store references for other controllers
         self._script_controller = None
         self._settings_controller = None
@@ -72,6 +84,9 @@ class AppController(QObject):
             from PyQt6.QtWidgets import QSystemTrayIcon
             self._tray_model.set_supports_notifications(QSystemTrayIcon.supportsMessages())
             
+            # Start the scheduler
+            self._schedule_controller.start_scheduler()
+            
             self.application_initialized.emit()
             logger.info("Application initialization complete")
             
@@ -99,6 +114,13 @@ class AppController(QObject):
         logger.info("Shutting down application...")
         
         self.application_shutting_down.emit()
+        
+        # Stop the scheduler
+        try:
+            self._schedule_controller.stop_scheduler()
+        except Exception as e:
+            logger.error(f"Error stopping scheduler: {e}")
+        
         self._app_model.shutdown_application()
         
         # Clean up models
@@ -148,6 +170,10 @@ class AppController(QObject):
     def get_window_model(self) -> WindowStateModel:
         """Get the window state model"""
         return self._window_model
+    
+    def get_schedule_controller(self) -> ScheduleController:
+        """Get the schedule controller"""
+        return self._schedule_controller
     
     def _setup_model_coordination(self):
         """Set up signal connections between models for coordination"""

@@ -51,6 +51,10 @@ class SettingsManager(QObject):
         'script_notifications': {
             # Per-script notification settings will be stored as 'script_notifications/ScriptName': boolean
             # This is just a placeholder for the schema
+        },
+        'schedules': {
+            # Script schedules will be stored as 'schedules/ScriptName': schedule_config_dict
+            # This is just a placeholder for the schema
         }
     }
     
@@ -635,5 +639,47 @@ class SettingsManager(QObject):
             self.settings.remove('')
             self.settings.sync()
             logger.info("Cleared all custom script names")
+        finally:
+            self.settings.endGroup()
+    
+    # Schedule management methods
+    def get_schedule(self, script_name: str) -> Optional[Dict[str, Any]]:
+        """Get schedule configuration for a script."""
+        return self.get(f'schedules/{script_name}')
+    
+    def set_schedule(self, script_name: str, schedule_config: Dict[str, Any]) -> None:
+        """Set schedule configuration for a script."""
+        self.set(f'schedules/{script_name}', schedule_config)
+    
+    def remove_schedule(self, script_name: str) -> None:
+        """Remove schedule configuration for a script."""
+        key = f'schedules/{script_name}'
+        if self.settings.contains(key):
+            self.settings.remove(key)
+            self.settings.sync()
+            logger.debug(f"Removed schedule for: {script_name}")
+    
+    def get_all_schedules(self) -> Dict[str, Dict[str, Any]]:
+        """Get all schedule configurations as {script_name: schedule_config}."""
+        result = {}
+        self.settings.beginGroup('schedules')
+        try:
+            for key in self.settings.allKeys():
+                result[key] = self.settings.value(key, {})
+        finally:
+            self.settings.endGroup()
+        return result
+    
+    def has_schedule(self, script_name: str) -> bool:
+        """Check if a script has a schedule configured."""
+        return self.settings.contains(f'schedules/{script_name}')
+    
+    def clear_all_schedules(self) -> None:
+        """Remove all schedule configurations."""
+        self.settings.beginGroup('schedules')
+        try:
+            self.settings.remove('')
+            self.settings.sync()
+            logger.info("Cleared all script schedules")
         finally:
             self.settings.endGroup()

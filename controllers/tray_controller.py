@@ -33,12 +33,14 @@ class TrayController(QObject):
     
     def __init__(self, tray_model: TrayIconModel,
                  notification_model: NotificationModel,
-                 script_controller: ScriptController):
+                 script_controller: ScriptController,
+                 schedule_controller=None):
         super().__init__()
         
         self._tray_model = tray_model
         self._notification_model = notification_model
         self._script_controller = script_controller
+        self._schedule_controller = schedule_controller
         
         # Connect model signals
         self._setup_model_connections()
@@ -138,6 +140,13 @@ class TrayController(QObject):
         elif status and status != "Ready":
             display_text += f" [{status}]"
         
+        # Add schedule indicator if scheduled
+        if self._schedule_controller and self._schedule_controller.has_schedule(script_name):
+            if self._schedule_controller.is_schedule_enabled(script_name):
+                display_text += " [Scheduled]"
+            else:
+                display_text += " [Schedule disabled]"
+        
         # Format with aligned hotkey if present
         if hotkey and max_name_length > 0:
             # Pad the script name to align the pipe character
@@ -160,32 +169,193 @@ class TrayController(QObject):
                 }
             }
         
-        if script_info.arguments:
-            # Only show saved presets; no auto-discovery in tray.
-            if self._has_preset_configuration(script_name):
-                return self._build_preset_submenu_item(script_info, display_text)
+        # Build submenu if script has arguments, presets, or schedule options
+        if script_info.arguments or (self._schedule_controller and not is_running):
+            submenu_items = []
+            
+            # Add execution options
+            if script_info.arguments:
+                if self._has_preset_configuration(script_name):
+                    # Add preset options
+                    preset_names = self._script_controller._settings_controller.get_script_preset_names(script_name)
+                    for preset_name in preset_names:
+                        submenu_items.append({
+                            'type': 'action',
+                            'text': f"Run: {preset_name}",
+                            'enabled': True,
+                            'data': {
+                                'action': 'execute_preset',
+                                'script_name': script_name,
+                                'preset_name': preset_name,
+                                'script_info': script_info
+                            }
+                        })
+                else:
+                    submenu_items.append({
+                        'type': 'action',
+                        'text': 'Configure Script',
+                        'enabled': True,
+                        'data': {
+                            'action': 'configure_script',
+                            'script_name': script_name,
+                            'script_info': script_info
+                        }
+                    })
             else:
-                return {
+                # Simple execution for scripts without arguments
+                submenu_items.append({
                     'type': 'action',
-                    'text': f"{display_text} (needs config)",
+                    'text': 'Run Now',
                     'enabled': True,
                     'data': {
-                        'action': 'configure_script',
+                        'action': 'execute_script',
                         'script_name': script_name,
                         'script_info': script_info
                     }
+                })
+            
+            # Add separator before schedule options
+            if self._schedule_controller and submenu_items:
+                submenu_items.append({'type': 'separator'})
+            
+            # Add schedule options if controller is available
+            if self._schedule_controller:
+                submenu_items.extend(self._build_schedule_menu_items(script_name, script_info))
+            
+            # If we have submenu items, return as submenu
+            if submenu_items:
+                return {
+                    'type': 'submenu',
+                    'text': display_text,
+                    'items': submenu_items
                 }
-        else:
-            return {
+        
+        # Simple action for scripts without arguments or schedule support
+        return {
+            'type': 'action',
+            'text': display_text,
+            'enabled': True,
+            'data': {
+                'action': 'execute_script',
+                'script_name': script_name,
+                'script_info': script_info
+            }
+        }
+    
+    def _build_schedule_menu_items(self, script_name: str, script_info) -> list:
+        """Build schedule-related menu items for a script."""
+        items = []
+        
+        if self._schedule_controller.has_schedule(script_name):
+            # Script has a schedule
+            is_enabled = self._schedule_controller.is_schedule_enabled(script_name)
+            
+            # Toggle enable/disable
+            items.append({
                 'type': 'action',
-                'text': display_text,
+                'text': 'Disable Schedule' if is_enabled else 'Enable Schedule',
                 'enabled': True,
                 'data': {
-                    'action': 'execute_script',
+                    'action': 'toggle_schedule',
                     'script_name': script_name,
                     'script_info': script_info
                 }
-            }
+            })
+            
+            # Show next run time
+            next_run = self._schedule_controller.get_next_run_time(script_name)
+            if next_run and is_enabled:
+                from datetime import datetime
+                time_diff = next_run - datetime.now()
+                if time_diff.days > 0:
+                    time_text = f"Next run: in {time_diff.days} day(s)"
+                elif time_diff.seconds > 3600:
+                    hours = time_diff.seconds // 3600
+                    time_text = f"Next run: in {hours} hour(s)"
+                else:
+                    minutes = time_diff.seconds // 60
+                    time_text = f"Next run: in {minutes} minute(s)"
+                
+                items.append({
+                    'type': 'action',
+                    'text': time_text,
+                    'enabled': False,
+                    'data': None
+                })
+            
+            # Edit schedule
+            items.append({
+                'type': 'action',
+                'text': 'Edit Schedule...',
+                'enabled': True,
+                'data': {
+                    'action': 'edit_schedule',
+                    'script_name': script_name,
+                    'script_info': script_info
+                }
+            })
+            
+            # Remove schedule
+            items.append({
+                'type': 'action',
+                'text': 'Remove Schedule',
+                'enabled': True,
+                'data': {
+                    'action': 'remove_schedule',
+                    'script_name': script_name,
+                    'script_info': script_info
+                }
+            })
+        else:
+            # No schedule yet
+            items.append({
+                'type': 'action',
+                'text': 'Add Schedule...',
+                'enabled': True,
+                'data': {
+                    'action': 'add_schedule',
+                    'script_name': script_name,
+                    'script_info': script_info
+                }
+            })
+            
+            # Quick schedule presets
+            items.append({'type': 'separator'})
+            items.append({
+                'type': 'action',
+                'text': 'Quick: Every 5 minutes',
+                'enabled': True,
+                'data': {
+                    'action': 'quick_schedule',
+                    'script_name': script_name,
+                    'preset': 'every_5_min',
+                    'script_info': script_info
+                }
+            })
+            items.append({
+                'type': 'action',
+                'text': 'Quick: Every hour',
+                'enabled': True,
+                'data': {
+                    'action': 'quick_schedule',
+                    'script_name': script_name,
+                    'preset': 'hourly',
+                    'script_info': script_info
+                }
+            })
+            items.append({
+                'type': 'action',
+                'text': 'Quick: Daily at 9 AM',
+                'enabled': True,
+                'data': {
+                    'action': 'quick_schedule',
+                    'script_name': script_name,
+                    'preset': 'daily_9am',
+                    'script_info': script_info
+                }
+            })
+        
+        return items
     
     def _build_choice_submenu_item(self, script_info, display_text: str) -> Dict[str, Any]:
         """Build submenu for script with choice arguments"""
@@ -277,6 +447,39 @@ class TrayController(QObject):
             return False
     
     # User interaction handlers (called by views)
+    def handle_schedule_action(self, action: str, script_name: str, script_info=None, **kwargs):
+        """Handle schedule-related menu actions."""
+        if not self._schedule_controller:
+            logger.warning("Schedule controller not available")
+            return
+        
+        try:
+            if action == 'add_schedule' or action == 'edit_schedule':
+                # Show schedule configuration dialog
+                self._schedule_controller.show_schedule_dialog(script_name, script_info)
+                # Update menu after configuration
+                self.update_menu()
+            
+            elif action == 'toggle_schedule':
+                # Toggle schedule enabled state
+                self._schedule_controller.toggle_schedule(script_name)
+                self.update_menu()
+            
+            elif action == 'remove_schedule':
+                # Remove the schedule
+                self._schedule_controller.remove_schedule(script_name)
+                self.update_menu()
+            
+            elif action == 'quick_schedule':
+                # Create a quick schedule with preset
+                preset = kwargs.get('preset')
+                if preset:
+                    self._schedule_controller.create_quick_schedule(script_name, preset)
+                    self.update_menu()
+            
+        except Exception as e:
+            logger.error(f"Error handling schedule action {action}: {e}")
+    
     def handle_menu_action(self, action_data: Dict[str, Any]):
         """Handle a menu action triggered by the user"""
         if not action_data:
@@ -299,6 +502,11 @@ class TrayController(QObject):
         elif action == 'configure_script':
             logger.info(f"Script configuration requested for: {script_name}")
             self.settings_dialog_requested.emit()
+        elif action in ['add_schedule', 'edit_schedule', 'toggle_schedule', 
+                       'remove_schedule', 'quick_schedule']:
+            # Handle schedule-related actions
+            script_info = action_data.get('script_info')
+            self.handle_schedule_action(action, script_name, script_info, **action_data)
         else:
             logger.warning(f"Unknown menu action: {action}")
     

@@ -234,9 +234,12 @@ class MVCApplication:
             script_collection, script_execution, hotkey_model
         )
         
+        # Get schedule controller from app controller
+        schedule_controller = self.app_controller.get_schedule_controller()
+        
         # Create tray controller
         self.tray_controller = TrayController(
-            tray_model, notification_model, self.script_controller
+            tray_model, notification_model, self.script_controller, schedule_controller
         )
         
         # Register controllers with app controller
