@@ -1,0 +1,150 @@
+name: Release Desktop Utility GUI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      create_release:
+        description: 'Create GitHub release'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    outputs:
+      version: ${{ steps.bump_version.outputs.version }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Bump version
+        id: bump_version
+        run: |
+          python bump_version.py ${{ github.event.inputs.version_bump }}
+          $version = python -c "from version import __version__; print(__version__)"
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "New version: $version"
+      
+      - name: Commit version bump
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add version.py version_info.py
+          git commit -m "chore: bump version to ${{ steps.bump_version.outputs.version }}"
+          git push
+      
+      - name: Build executable with PyInstaller
+        run: |
+          pyinstaller desktop_utility_gui.spec --clean
+          echo "Executable built successfully"
+      
+      - name: Download Inno Setup
+        run: |
+          # Download Inno Setup installer
+          Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile "innosetup.exe"
+          # Install Inno Setup silently
+          Start-Process -FilePath "innosetup.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-" -Wait
+          echo "Inno Setup installed"
+      
+      - name: Build installer with Inno Setup
+        run: |
+          # Set version in Inno Setup script
+          $version = "${{ steps.bump_version.outputs.version }}"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" "installer.iss"
+          echo "Installer built successfully"
+      
+      - name: Create release tag
+        if: github.event.inputs.create_release == 'true'
+        run: |
+          git tag -a "v${{ steps.bump_version.outputs.version }}" -m "Release v${{ steps.bump_version.outputs.version }}"
+          git push origin "v${{ steps.bump_version.outputs.version }}"
+      
+      - name: Create GitHub Release
+        if: github.event.inputs.create_release == 'true'
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.bump_version.outputs.version }}
+          release_name: Desktop Utility GUI v${{ steps.bump_version.outputs.version }}
+          body: |
+            ## Desktop Utility GUI v${{ steps.bump_version.outputs.version }}
+            
+            ### Installation
+            Download and run the installer below. The application will be installed to your Program Files directory and can be configured to start automatically with Windows.
+            
+            ### What's New
+            - See [commit history](https://github.com/${{ github.repository }}/commits/v${{ steps.bump_version.outputs.version }}) for changes
+            
+            ### System Requirements
+            - Windows 10/11 (64-bit)
+            - Python runtime included in installer
+          draft: false
+          prerelease: false
+      
+      - name: Upload installer to release
+        if: github.event.inputs.create_release == 'true'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/DesktopUtilityGUI_Setup_${{ steps.bump_version.outputs.version }}.exe
+          asset_name: DesktopUtilityGUI_Setup_${{ steps.bump_version.outputs.version }}.exe
+          asset_content_type: application/octet-stream
+      
+      - name: Upload portable executable to release
+        if: github.event.inputs.create_release == 'true'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/DesktopUtilityGUI.exe
+          asset_name: DesktopUtilityGUI_Portable_${{ steps.bump_version.outputs.version }}.exe
+          asset_content_type: application/octet-stream
+
+  notify:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Notify success
+        if: needs.build-and-release.result == 'success'
+        run: |
+          echo "Release v${{ needs.build-and-release.outputs.version }} created successfully!"
+      
+      - name: Notify failure
+        if: needs.build-and-release.result == 'failure'
+        run: |
+          echo "Release build failed. Check the logs for details."
+          exit 1

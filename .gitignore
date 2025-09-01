@@ -53,3 +53,19 @@ htmlcov/
 .env
 .env.local
 .claude/settings.local.json
+
+# Build artifacts
+build/
+dist/
+*.spec.bak
+output/
+
+# Installer files
+*.exe
+!assets/*.exe
+innosetup.exe
+
+# PyInstaller
+*.manifest
+*.pyz
+*.pkg
