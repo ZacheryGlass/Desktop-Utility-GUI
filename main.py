@@ -58,7 +58,22 @@ class SingleApplication(QApplication):
         self._lock = None
 
         # Prepare a per-user lock file in a writable location
-        base_dir = QStandardPaths.writableLocation(QStandardPaths.AppConfigLocation)
+        # PyQt6 nests enums: use StandardLocation; fall back for older Qt
+        base_dir = ""
+        try:
+            base_dir = QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.AppConfigLocation
+            )
+        except AttributeError:
+            # Older Qt may not have AppConfigLocation
+            pass
+        if not base_dir:
+            try:
+                base_dir = QStandardPaths.writableLocation(
+                    QStandardPaths.StandardLocation.AppLocalDataLocation
+                )
+            except Exception:
+                base_dir = ""
         if not base_dir:
             base_dir = QDir.tempPath()
         dir_obj = QDir(base_dir)
