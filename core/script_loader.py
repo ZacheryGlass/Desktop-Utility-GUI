@@ -3,6 +3,7 @@ import sys
 import importlib.util
 import traceback
 import logging
+import concurrent.futures
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from .script_analyzer import ScriptAnalyzer, ScriptInfo
@@ -28,13 +29,24 @@ class ScriptLoader:
         scripts = []
         self.failed_scripts.clear()
         
-        # Discover scripts from default directory
-        default_scripts = self._discover_default_scripts()
-        scripts.extend(default_scripts)
-        
-        # Discover external scripts
-        external_scripts = self._discover_external_scripts()
-        scripts.extend(external_scripts)
+        # Use ThreadPoolExecutor for parallel script discovery
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit both discovery tasks to run in parallel
+            default_future = executor.submit(self._discover_default_scripts)
+            external_future = executor.submit(self._discover_external_scripts)
+            
+            # Wait for both to complete and collect results
+            try:
+                default_scripts = default_future.result(timeout=10)
+                scripts.extend(default_scripts)
+            except Exception as e:
+                logger.error(f"Error discovering default scripts: {e}")
+            
+            try:
+                external_scripts = external_future.result(timeout=10)
+                scripts.extend(external_scripts)
+            except Exception as e:
+                logger.error(f"Error discovering external scripts: {e}")
         
         logger.info(f"Script discovery complete: {len(scripts)} total scripts loaded, {len(self.failed_scripts)} failed")
         return scripts
@@ -52,32 +64,51 @@ class ScriptLoader:
         script_files = list(self.scripts_directory.glob("*.py"))
         logger.info(f"Found {len(script_files)} Python files in scripts directory")
         
+        # Filter out files starting with "__"
+        script_files = [f for f in script_files if not f.name.startswith("__")]
+        
         # Sort files to ensure consistent ordering
         script_files.sort(key=lambda f: f.name.lower())
         
-        for script_file in script_files:
-            if script_file.name.startswith("__"):
-                logger.debug(f"Skipping {script_file.name} (starts with __)")
-                continue
+        # Analyze scripts in parallel using thread pool
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit all script analysis tasks
+            future_to_file = {
+                executor.submit(self._analyze_single_script, script_file): script_file
+                for script_file in script_files
+            }
             
-            logger.debug(f"Attempting to analyze: {script_file.name}")
-            try:
-                script_info = self.analyzer.analyze_script(script_file)
-                if script_info.is_executable:
-                    scripts.append(script_info)
-                    self.loaded_scripts[script_file.stem] = script_info
-                    logger.info(f"Successfully analyzed default script: {script_file.name}")
-                else:
-                    error_msg = f"Script not executable: {script_info.error}"
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_file):
+                script_file = future_to_file[future]
+                try:
+                    script_info = future.result(timeout=5)
+                    if script_info and script_info.is_executable:
+                        scripts.append(script_info)
+                        self.loaded_scripts[script_file.stem] = script_info
+                        logger.info(f"Successfully analyzed default script: {script_file.name}")
+                    elif script_info:
+                        error_msg = f"Script not executable: {script_info.error}"
+                        self.failed_scripts[script_file.name] = error_msg
+                        logger.warning(f"Default script {script_file.name} is not executable: {script_info.error}")
+                except Exception as e:
+                    error_msg = f"Failed to analyze {script_file.name}: {str(e)}"
                     self.failed_scripts[script_file.name] = error_msg
-                    logger.warning(f"Default script {script_file.name} is not executable: {script_info.error}")
-            except Exception as e:
-                error_msg = f"Failed to analyze {script_file.name}: {str(e)}"
-                self.failed_scripts[script_file.name] = error_msg
-                logger.error(f"Error analyzing default script: {error_msg}")
+                    logger.error(f"Error analyzing default script: {error_msg}")
         
         logger.info(f"Default script discovery: {len(scripts)} loaded")
         return scripts
+    
+    def _analyze_single_script(self, script_file: Path) -> Optional[ScriptInfo]:
+        """Analyze a single script file. Thread-safe method for parallel execution."""
+        logger.debug(f"Attempting to analyze: {script_file.name}")
+        try:
+            # Create a new analyzer instance for thread safety
+            analyzer = ScriptAnalyzer()
+            return analyzer.analyze_script(script_file)
+        except Exception as e:
+            logger.error(f"Error in _analyze_single_script for {script_file.name}: {e}")
+            raise
     
     def _discover_external_scripts(self) -> List[ScriptInfo]:
         """Discover scripts from external paths configured in settings."""
@@ -87,10 +118,14 @@ class ScriptLoader:
         external_scripts = self.settings.get_external_scripts()
         logger.info(f"Found {len(external_scripts)} configured external scripts")
         
-        for script_name, script_path in external_scripts.items():
-            try:
-                script_file = Path(script_path)
-                
+        if not external_scripts:
+            return scripts
+        
+        # Analyze external scripts in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit all external script analysis tasks
+            future_to_script = {}
+            for script_name, script_path in external_scripts.items():
                 # Validate the path still exists and is valid
                 if not self.settings.validate_external_script_path(script_path):
                     error_msg = f"External script path is invalid or missing: {script_path}"
@@ -98,30 +133,43 @@ class ScriptLoader:
                     logger.warning(error_msg)
                     continue
                 
-                logger.debug(f"Attempting to analyze external script: {script_name} -> {script_path}")
-                script_info = self.analyzer.analyze_script(script_file)
-                
-                if script_info.is_executable:
-                    # Override the display name with the configured name
-                    script_info.display_name = script_name
-                    
-                    # Use the configured name as the key for external scripts
-                    # This allows external scripts to have custom names that differ from filename
-                    scripts.append(script_info)
-                    self.loaded_scripts[script_name] = script_info
-                    logger.info(f"Successfully analyzed external script: {script_name} -> {script_path}")
-                else:
-                    error_msg = f"External script not executable: {script_info.error}"
+                future = executor.submit(self._analyze_external_script, script_name, script_path)
+                future_to_script[future] = (script_name, script_path)
+            
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_script):
+                script_name, script_path = future_to_script[future]
+                try:
+                    script_info = future.result(timeout=5)
+                    if script_info and script_info.is_executable:
+                        # Override the display name with the configured name
+                        script_info.display_name = script_name
+                        scripts.append(script_info)
+                        self.loaded_scripts[script_name] = script_info
+                        logger.info(f"Successfully analyzed external script: {script_name} -> {script_path}")
+                    elif script_info:
+                        error_msg = f"External script not executable: {script_info.error}"
+                        self.failed_scripts[f"{script_name} (external)"] = error_msg
+                        logger.warning(f"External script {script_name} is not executable: {script_info.error}")
+                except Exception as e:
+                    error_msg = f"Failed to analyze external script {script_name} at {script_path}: {str(e)}"
                     self.failed_scripts[f"{script_name} (external)"] = error_msg
-                    logger.warning(f"External script {script_name} is not executable: {script_info.error}")
-                    
-            except Exception as e:
-                error_msg = f"Failed to analyze external script {script_name} at {script_path}: {str(e)}"
-                self.failed_scripts[f"{script_name} (external)"] = error_msg
-                logger.error(error_msg)
+                    logger.error(error_msg)
         
         logger.info(f"External script discovery: {len(scripts)} loaded")
         return scripts
+    
+    def _analyze_external_script(self, script_name: str, script_path: str) -> Optional[ScriptInfo]:
+        """Analyze a single external script. Thread-safe method for parallel execution."""
+        logger.debug(f"Attempting to analyze external script: {script_name} -> {script_path}")
+        try:
+            script_file = Path(script_path)
+            # Create a new analyzer instance for thread safety
+            analyzer = ScriptAnalyzer()
+            return analyzer.analyze_script(script_file)
+        except Exception as e:
+            logger.error(f"Error in _analyze_external_script for {script_name}: {e}")
+            raise
     
     def execute_script(self, script_name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Execute a script by name with provided arguments."""
