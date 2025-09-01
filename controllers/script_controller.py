@@ -77,6 +77,11 @@ class ScriptController(QObject):
         arguments = {arg_name: choice}
         self._script_execution.execute_script(script_name, arguments)
     
+    def cancel_script_execution(self, script_name: str) -> bool:
+        """Cancel a running script execution"""
+        logger.info(f"Script cancellation requested: {script_name}")
+        return self._script_execution.cancel_script_execution(script_name)
+    
     # Script management methods
     def refresh_scripts(self):
         """Refresh the script collection"""

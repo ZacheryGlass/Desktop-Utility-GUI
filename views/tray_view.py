@@ -140,6 +140,11 @@ class TrayView(QObject):
         enabled = item_data.get('enabled', True)
         
         if item_type == 'action':
+            # Check if this is a running script (show with special indicator)
+            is_running = item_data.get('is_running', False)
+            if is_running:
+                text = f"⏳ {text} (Running...)"
+            
             action = QAction(text, parent_menu)
             action.setEnabled(enabled)
             

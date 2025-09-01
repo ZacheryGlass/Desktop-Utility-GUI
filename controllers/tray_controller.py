@@ -129,8 +129,13 @@ class TrayController(QObject):
         """
         script_name = script_info.display_name  # original name for actions
         
+        # Check if script is currently running
+        is_running = self._script_controller._script_execution.is_script_running(script_name)
+        
         # Build the base display text with status
-        if status and status != "Ready":
+        if is_running:
+            display_text += " [Running...]"
+        elif status and status != "Ready":
             display_text += f" [{status}]"
         
         # Format with aligned hotkey if present
@@ -140,6 +145,20 @@ class TrayController(QObject):
         elif hotkey:
             # Fallback if no alignment (shouldn't happen in normal flow)
             display_text += f" ({hotkey})"
+        
+        # If script is running, allow cancellation
+        if is_running:
+            return {
+                'type': 'action',
+                'text': display_text,
+                'enabled': True,
+                'is_running': True,
+                'data': {
+                    'action': 'cancel_script',
+                    'script_name': script_name,
+                    'script_info': script_info
+                }
+            }
         
         if script_info.arguments:
             # Only show saved presets; no auto-discovery in tray.
@@ -274,6 +293,9 @@ class TrayController(QObject):
         elif action == 'execute_script_with_preset':
             preset_name = action_data.get('preset_name')
             self._script_controller.execute_script_with_preset(script_name, preset_name)
+        elif action == 'cancel_script':
+            logger.info(f"Script cancellation requested for: {script_name}")
+            self._script_controller.cancel_script_execution(script_name)
         elif action == 'configure_script':
             logger.info(f"Script configuration requested for: {script_name}")
             self.settings_dialog_requested.emit()
@@ -308,4 +330,13 @@ class TrayController(QObject):
         self._notification_model.notification_shown.connect(self.notification_display_requested.emit)
         self._script_controller.script_list_updated.connect(lambda scripts: self.update_menu())
         self._script_controller.script_status_updated.connect(lambda name, status: self.update_menu())
+        
+        # Connect script execution signals to update menu for running state
+        self._script_controller._script_execution.script_execution_started.connect(
+            lambda name: self.update_menu())
+        self._script_controller._script_execution.script_execution_completed.connect(
+            lambda name, result: self.update_menu())
+        self._script_controller._script_execution.script_execution_failed.connect(
+            lambda name, error: self.update_menu())
+        
         logger.debug("Tray controller model connections setup complete")

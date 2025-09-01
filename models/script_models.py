@@ -7,7 +7,7 @@ UI-agnostic and providing signals for state changes.
 import logging
 from typing import List, Dict, Any, Optional, Set
 from pathlib import Path
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QThread
 
 from core.script_loader import ScriptLoader
 from core.script_analyzer import ScriptInfo
@@ -15,6 +15,45 @@ from core.settings import SettingsManager
 from core.hotkey_registry import HotkeyRegistry
 
 logger = logging.getLogger('Models.Scripts')
+
+
+class ScriptExecutionWorker(QThread):
+    """Worker thread for executing scripts asynchronously."""
+    
+    # Signals
+    execution_completed = pyqtSignal(dict)  # result dict
+    execution_failed = pyqtSignal(str)  # error message
+    
+    def __init__(self, script_loader, script_key: str, arguments: Dict[str, Any]):
+        super().__init__()
+        self.script_loader = script_loader
+        self.script_key = script_key
+        self.arguments = arguments
+        self._is_cancelled = False
+    
+    def run(self):
+        """Execute the script in this thread."""
+        try:
+            if self._is_cancelled:
+                self.execution_failed.emit("Script execution cancelled")
+                return
+            
+            # Execute the script
+            result = self.script_loader.execute_script(self.script_key, self.arguments)
+            
+            if self._is_cancelled:
+                self.execution_failed.emit("Script execution cancelled")
+                return
+            
+            self.execution_completed.emit(result)
+            
+        except Exception as e:
+            logger.error(f"Script execution thread error: {str(e)}")
+            self.execution_failed.emit(str(e))
+    
+    def cancel(self):
+        """Request cancellation of the script execution."""
+        self._is_cancelled = True
 
 
 class ScriptCollectionModel(QObject):
@@ -209,6 +248,7 @@ class ScriptExecutionModel(QObject):
     script_execution_completed = pyqtSignal(str, dict)  # script name, result
     script_execution_failed = pyqtSignal(str, str)  # script name, error
     script_status_changed = pyqtSignal(str, str)  # script name, status
+    script_execution_progress = pyqtSignal(str, str)  # script name, status message
     
     def __init__(self, script_collection: ScriptCollectionModel):
         super().__init__()
@@ -218,6 +258,7 @@ class ScriptExecutionModel(QObject):
         
         self._execution_results: Dict[str, Dict[str, Any]] = {}
         self._script_statuses: Dict[str, str] = {}
+        self._active_workers: Dict[str, ScriptExecutionWorker] = {}  # Track active execution threads
         
         # Setup status refresh timer
         self._status_timer = QTimer()
@@ -227,15 +268,27 @@ class ScriptExecutionModel(QObject):
         
         logger.info("ScriptExecutionModel initialized")
     
-    def execute_script(self, script_name: str, arguments: Optional[Dict[str, Any]] = None) -> bool:
-        """Execute a script with optional arguments"""
+    def execute_script(self, script_name: str, arguments: Optional[Dict[str, Any]] = None, async_execution: bool = True) -> bool:
+        """Execute a script with optional arguments
+        
+        Args:
+            script_name: Name of the script to execute
+            arguments: Optional arguments for the script
+            async_execution: If True, execute in background thread. If False, execute synchronously.
+        """
         try:
+            # Check if script is already running
+            if script_name in self._active_workers:
+                logger.warning(f"Script {script_name} is already running")
+                self.script_execution_failed.emit(script_name, "Script is already running")
+                return False
+            
             script_info = self._script_collection.get_script_by_name(script_name)
             if not script_info:
                 self.script_execution_failed.emit(script_name, f"Script not found: {script_name}")
                 return False
             
-            logger.info(f"Executing script: {script_name}")
+            logger.info(f"Executing script: {script_name} (async={async_execution})")
             self.script_execution_started.emit(script_name)
             
             # Determine script key for execution
@@ -244,21 +297,36 @@ class ScriptExecutionModel(QObject):
             else:
                 script_key = script_info.file_path.stem  # Use file stem for default scripts
             
-            # Execute the script
-            result = self._script_loader.execute_script(script_key, arguments or {})
-            
-            # Store result
-            self._execution_results[script_name] = result
-            
-            if result.get('success', False):
-                self.script_execution_completed.emit(script_name, result)
-                logger.info(f"Script execution completed: {script_name}")
+            if async_execution:
+                # Create and start worker thread
+                worker = ScriptExecutionWorker(self._script_loader, script_key, arguments or {})
+                
+                # Connect signals
+                worker.execution_completed.connect(lambda result: self._handle_execution_completed(script_name, result))
+                worker.execution_failed.connect(lambda error: self._handle_execution_failed(script_name, error))
+                worker.finished.connect(lambda: self._cleanup_worker(script_name))
+                
+                # Store worker and start execution
+                self._active_workers[script_name] = worker
+                worker.start()
+                
+                return True  # Execution started successfully
             else:
-                error_msg = result.get('message', 'Unknown error')
-                self.script_execution_failed.emit(script_name, error_msg)
-                logger.error(f"Script execution failed: {script_name} - {error_msg}")
-            
-            return result.get('success', False)
+                # Synchronous execution (fallback for compatibility)
+                result = self._script_loader.execute_script(script_key, arguments or {})
+                
+                # Store result
+                self._execution_results[script_name] = result
+                
+                if result.get('success', False):
+                    self.script_execution_completed.emit(script_name, result)
+                    logger.info(f"Script execution completed: {script_name}")
+                else:
+                    error_msg = result.get('message', 'Unknown error')
+                    self.script_execution_failed.emit(script_name, error_msg)
+                    logger.error(f"Script execution failed: {script_name} - {error_msg}")
+                
+                return result.get('success', False)
             
         except Exception as e:
             error_msg = f"Error executing script {script_name}: {str(e)}"
@@ -266,7 +334,57 @@ class ScriptExecutionModel(QObject):
             self.script_execution_failed.emit(script_name, str(e))
             return False
     
-    def execute_script_with_preset(self, script_name: str, preset_name: str) -> bool:
+    def cancel_script_execution(self, script_name: str) -> bool:
+        """Cancel a running script execution.
+        
+        Args:
+            script_name: Name of the script to cancel
+            
+        Returns:
+            True if cancellation was requested, False if script was not running
+        """
+        if script_name in self._active_workers:
+            logger.info(f"Cancelling script execution: {script_name}")
+            worker = self._active_workers[script_name]
+            worker.cancel()
+            worker.quit()
+            worker.wait(1000)  # Wait up to 1 second for thread to finish
+            if worker.isRunning():
+                worker.terminate()  # Force terminate if still running
+            self._cleanup_worker(script_name)
+            self.script_execution_failed.emit(script_name, "Execution cancelled by user")
+            return True
+        return False
+    
+    def is_script_running(self, script_name: str) -> bool:
+        """Check if a script is currently running.
+        
+        Args:
+            script_name: Name of the script to check
+            
+        Returns:
+            True if script is running, False otherwise
+        """
+        return script_name in self._active_workers
+    
+    def _handle_execution_completed(self, script_name: str, result: Dict[str, Any]):
+        """Handle successful script execution completion."""
+        self._execution_results[script_name] = result
+        self.script_execution_completed.emit(script_name, result)
+        logger.info(f"Script execution completed: {script_name}")
+    
+    def _handle_execution_failed(self, script_name: str, error: str):
+        """Handle script execution failure."""
+        self.script_execution_failed.emit(script_name, error)
+        logger.error(f"Script execution failed: {script_name} - {error}")
+    
+    def _cleanup_worker(self, script_name: str):
+        """Clean up worker thread after completion."""
+        if script_name in self._active_workers:
+            worker = self._active_workers.pop(script_name)
+            worker.deleteLater()
+    
+    def execute_script_with_preset(self, script_name: str, preset_name: str, async_execution: bool = True) -> bool:
         """Execute a script with a specific preset configuration"""
         try:
             script_info = self._script_collection.get_script_by_name(script_name)
@@ -279,7 +397,7 @@ class ScriptExecutionModel(QObject):
             preset_args = self._settings.get_preset_arguments(script_key, preset_name)
             
             logger.info(f"Executing script {script_name} with preset '{preset_name}': {preset_args}")
-            return self.execute_script(script_name, preset_args)
+            return self.execute_script(script_name, preset_args, async_execution)
             
         except Exception as e:
             error_msg = f"Error executing script {script_name} with preset {preset_name}: {str(e)}"
