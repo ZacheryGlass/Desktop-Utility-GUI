@@ -86,6 +86,10 @@ class TrayController(QObject):
                 'data': None
             })
         else:
+            # First pass: collect all script data and find max name length
+            script_data = []
+            max_name_length = 0
+            
             for script_info in scripts:
                 # Use effective display name (respects custom names) for UI text
                 effective_name = self._script_controller._script_collection.get_script_display_name(script_info)
@@ -96,22 +100,45 @@ class TrayController(QObject):
                 # Hotkey lookup by file stem identifier
                 stem = script_info.file_path.stem if hasattr(script_info, 'file_path') else None
                 hotkey = self._script_controller.get_script_hotkey(stem) if stem else None
-                menu_items.append(self._build_script_menu_item(script_info, effective_name, status, hotkey))
+                
+                # Track max length for scripts with hotkeys
+                if hotkey:
+                    # Include status in the length calculation if present
+                    name_with_status = effective_name
+                    if status and status != "Ready":
+                        name_with_status += f" [{status}]"
+                    max_name_length = max(max_name_length, len(name_with_status))
+                
+                script_data.append((script_info, effective_name, status, hotkey))
+            
+            # Second pass: build menu items with aligned formatting
+            for script_info, effective_name, status, hotkey in script_data:
+                menu_items.append(self._build_script_menu_item(
+                    script_info, effective_name, status, hotkey, max_name_length
+                ))
         return {
             'title': 'Desktop Utilities',
             'items': menu_items
         }
 
-    def _build_script_menu_item(self, script_info, display_text: str, status: str, hotkey: str = None) -> Dict[str, Any]:
-        """Build a menu item for a specific script.
+    def _build_script_menu_item(self, script_info, display_text: str, status: str, hotkey: str = None, max_name_length: int = 0) -> Dict[str, Any]:
+        """Build a menu item for a specific script with aligned hotkey display.
 
         display_text is the effective (customized) name, while script_info.display_name is the
         original identifier used by models.
         """
         script_name = script_info.display_name  # original name for actions
+        
+        # Build the base display text with status
         if status and status != "Ready":
             display_text += f" [{status}]"
-        if hotkey:
+        
+        # Format with aligned hotkey if present
+        if hotkey and max_name_length > 0:
+            # Pad the script name to align the pipe character
+            display_text = f"{display_text:<{max_name_length}} | {hotkey}"
+        elif hotkey:
+            # Fallback if no alignment (shouldn't happen in normal flow)
             display_text += f" ({hotkey})"
         
         if script_info.arguments:
