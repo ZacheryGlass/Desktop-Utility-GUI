@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "releaseType",
+      "type": "pickString",
+      "description": "Select release type",
+      "options": ["patch", "minor", "major"],
+      "default": "major"
+    }
+  ],
+  "tasks": [
+    {
+      "label": "Release: Run GitHub workflow",
+      "type": "shell",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/run-release.ps1",
+        "-Type",
+        "${input:releaseType}",
+        "-Branch",
+        "main"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
+      "problemMatcher": []
+    }
+  ]
+}
+
