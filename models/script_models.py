@@ -7,7 +7,7 @@ UI-agnostic and providing signals for state changes.
 import logging
 from typing import List, Dict, Any, Optional, Set
 from pathlib import Path
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QThread
+from PyQt6.QtCore import QObject, pyqtSignal, QThread
 
 from core.script_loader import ScriptLoader
 from core.script_analyzer import ScriptInfo
@@ -247,7 +247,6 @@ class ScriptExecutionModel(QObject):
     script_execution_started = pyqtSignal(str)  # script name
     script_execution_completed = pyqtSignal(str, dict)  # script name, result
     script_execution_failed = pyqtSignal(str, str)  # script name, error
-    script_status_changed = pyqtSignal(str, str)  # script name, status
     script_execution_progress = pyqtSignal(str, str)  # script name, status message
     
     def __init__(self, script_collection: ScriptCollectionModel):
@@ -257,14 +256,7 @@ class ScriptExecutionModel(QObject):
         self._settings = SettingsManager()
         
         self._execution_results: Dict[str, Dict[str, Any]] = {}
-        self._script_statuses: Dict[str, str] = {}
         self._active_workers: Dict[str, ScriptExecutionWorker] = {}  # Track active execution threads
-        
-        # Setup status refresh timer
-        self._status_timer = QTimer()
-        self._status_timer.timeout.connect(self._refresh_script_statuses)
-        # Hard-coded refresh interval: 5 seconds
-        self._status_timer.start(5000)
         
         logger.info("ScriptExecutionModel initialized")
     
@@ -407,19 +399,18 @@ class ScriptExecutionModel(QObject):
     
     def get_script_status(self, script_name: str) -> str:
         """Get current status of a script"""
-        if script_name not in self._script_statuses:
-            # Determine script key for status lookup
-            script_info = self._script_collection.get_script_by_name(script_name)
-            if script_info:
-                if self._script_collection.is_external_script(script_name):
-                    script_key = script_name
-                else:
-                    script_key = script_info.file_path.stem
-                
-                status = self._script_loader.get_script_status(script_key)
-                self._script_statuses[script_name] = status or "Ready"
+        # Simplified: directly get status without caching
+        script_info = self._script_collection.get_script_by_name(script_name)
+        if script_info:
+            if self._script_collection.is_external_script(script_name):
+                script_key = script_name
+            else:
+                script_key = script_info.file_path.stem
+            
+            status = self._script_loader.get_script_status(script_key)
+            return status or "Ready"
         
-        return self._script_statuses.get(script_name, "Unknown")
+        return "Unknown"
     
     def get_last_execution_result(self, script_name: str) -> Optional[Dict[str, Any]]:
         """Get the last execution result for a script"""
@@ -432,21 +423,6 @@ class ScriptExecutionModel(QObject):
             script_key = script_info.file_path.stem
             return self._settings.should_show_script_notifications(script_key)
         return True
-    
-    def _refresh_script_statuses(self):
-        """Refresh status for all scripts"""
-        try:
-            for script in self._script_collection.get_available_scripts():
-                script_name = script.display_name
-                old_status = self._script_statuses.get(script_name, "Unknown")
-                new_status = self.get_script_status(script_name)
-                
-                if old_status != new_status:
-                    self._script_statuses[script_name] = new_status
-                    self.script_status_changed.emit(script_name, new_status)
-                    
-        except Exception as e:
-            logger.debug(f"Error refreshing script statuses: {e}")
 
 
 class HotkeyModel(QObject):

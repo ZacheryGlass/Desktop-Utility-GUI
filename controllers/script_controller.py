@@ -224,7 +224,6 @@ class ScriptController(QObject):
         
         # Connect script execution results
         self._script_execution.script_execution_completed.connect(self.script_executed.emit)
-        self._script_execution.script_status_changed.connect(self.script_status_updated.emit)
         
         # Connect hotkey registration failures
         self._hotkey_model.hotkey_registration_failed.connect(self.hotkey_registration_failed.emit)
