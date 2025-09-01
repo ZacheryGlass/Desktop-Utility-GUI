@@ -1,0 +1,37 @@
+; Inno Setup script for Desktop Utility GUI
+
+#define MyAppName "Desktop Utility GUI"
+#define MyAppExeName "DesktopUtilityGUI.exe"
+#define MyAppVersion GetStringParam("MyAppVersion", "0.0.0")
+#define MyPublisher "Desktop Utility GUI"
+
+[Setup]
+AppId={{B0DE5D8F-DAE9-4F28-9C22-4F996B0EDE16}}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyPublisher}
+DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+UninstallDisplayIcon={app}\{#MyAppExeName}
+Compression=lzma
+SolidCompression=yes
+OutputDir=installer\output
+OutputBaseFilename=DesktopUtilityGUI-{#MyAppVersion}-Setup
+WizardStyle=modern
+ArchitecturesInstallIn64BitMode=x64
+PrivilegesRequired=lowest
+
+[Files]
+; Install the entire PyInstaller onedir output
+Source: "dist\DesktopUtilityGUI\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+; Create a Startup shortcut to launch minimized (user-level, uninstall cleans it up)
+Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--minimized"; Tasks: startwithwindows
+
+[Tasks]
+Name: "startwithwindows"; Description: "Start {#MyAppName} at login"; Flags: checkedonce
+
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
