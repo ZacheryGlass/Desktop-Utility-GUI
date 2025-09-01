@@ -554,15 +554,29 @@ def main():
     logger.info(f"Command line args: {sys.argv}")
     logger.info("="*60)
     
-    # Create QApplication
+    # Create application with single-instance support
     app = None
+    app = SingleApplication(sys.argv, 'DesktopUtilityGUI-SingleInstance')
     
-    # For now, skip single instance check during MVC transition
-    # TODO: Re-implement single instance check with MVC pattern
-    app = QApplication(sys.argv)
-    
+    # Set application identity before accessing QSettings
     app.setApplicationName("Desktop Utility GUI")
     app.setOrganizationName("DesktopUtils")
+    
+    # Honor the user's single-instance setting
+    try:
+        from core.settings import SettingsManager
+        settings = SettingsManager()
+        single_instance_enabled = settings.get('behavior/single_instance', True)
+        if single_instance_enabled and app.is_running():
+            logger.warning("Another instance is already running. Exiting.")
+            QMessageBox.information(
+                None,
+                "Already Running",
+                "Desktop Utility GUI is already running in the system tray."
+            )
+            sys.exit(0)
+    except Exception as e:
+        logger.error(f"Failed to check single-instance setting: {e}")
     
     # Check if system tray is available
     if not QSystemTrayIcon.isSystemTrayAvailable():
