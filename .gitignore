@@ -26,6 +26,12 @@ wheels/
 .installed.cfg
 *.egg
 
+# Installer outputs
+installer/output/
+
+# Generated during CI packaging
+version_info.py
+
 # PyQt
 *.ui.autosave
 

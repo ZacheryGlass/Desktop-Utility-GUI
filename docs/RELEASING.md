@@ -1,58 +1,65 @@
 Releasing Desktop Utility GUI
 =============================
 
-This guide explains how to build a signed installer for Windows and publish it to GitHub Releases using a one‑click workflow.
+This guide explains how to build and publish Windows releases (portable EXE and installer) using a one‑click GitHub Actions workflow.
 
 Overview
 --------
-- Version lives in the root `VERSION` file.
-- GitHub Action bumps the version, tags `vX.Y.Z`, builds the EXE (PyInstaller), builds the installer (Inno Setup), and publishes a GitHub Release with the installer attached.
-- The installer creates an optional Startup entry (enabled by default) so the app runs on login using `--minimized`.
+- Source of truth: `VERSION` at repo root (semantic: `X.Y.Z`).
+- The Release workflow bumps `VERSION`, creates a `vX.Y.Z` tag, builds the app with PyInstaller (using a spec), generates a Windows installer with Inno Setup, and attaches both artifacts to a GitHub Release.
+- The installer can optionally add a Startup shortcut so the app runs at login (launches with `--minimized`).
 
 One‑Click Release (GitHub)
 -------------------------
 1. Push your changes to `main`.
 2. In GitHub, open the `Actions` tab → select `Release` workflow.
-3. Click `Run workflow` and choose the bump type: `patch`, `minor`, or `major`.
+3. Click “Run workflow” and choose the bump type: `patch`, `minor`, or `major`.
 4. The workflow will:
-   - Bump `VERSION`, commit with `chore(release): vX.Y.Z`, and create `vX.Y.Z` tag.
-   - Build a standalone EXE via PyInstaller.
-   - Build a Windows installer via Inno Setup.
-   - Create a GitHub Release and upload `DesktopUtilityGUI-X.Y.Z-Setup.exe`.
+   - Bump `VERSION`, commit `chore(release): vX.Y.Z`, and tag `vX.Y.Z`.
+   - Generate `version_info.py` so the EXE embeds proper Windows version resources.
+   - Build the app via PyInstaller using `desktop_utility_gui.spec` (includes `scripts/` and `style.qss`).
+   - Build the Windows installer via Inno Setup.
+   - Create a GitHub Release and upload both the installer and the portable EXE.
 
 Artifacts & Locations
 ---------------------
-- PyInstaller output: `dist/DesktopUtilityGUI/DesktopUtilityGUI.exe`
-- Inno Setup output: `installer/output/DesktopUtilityGUI-X.Y.Z-Setup.exe`
+- Portable EXE: `dist/DesktopUtilityGUI/DesktopUtilityGUI.exe`
+- Installer: `installer/output/DesktopUtilityGUI-X.Y.Z-Setup.exe`
 
-Startup Behavior
-----------------
-- The installer adds a Startup shortcut for the current user so the app launches on login minimized to tray.
-- You can opt out during install by unchecking “Start Desktop Utility GUI at login”.
-- Uninstall removes the Startup entry.
+What’s Packaged
+---------------
+- Spec file includes:
+  - Resources: `style.qss`, `scripts/`
+  - Hidden imports for PyQt6, pywin32 APIs, easyocr and common dependencies
+  - Optional icon: `assets/icon.ico` (if present)
+- Windows version metadata embedded from `version_info.py` (auto‑generated in CI).
 
 Local Build (optional)
 ----------------------
-You can build locally if desired (Windows):
+You can build locally on Windows for testing:
 
 1. Create the executable
    - `pip install -r requirements.txt`
    - `pip install pyinstaller`
-   - `pyinstaller --noconfirm --clean --name DesktopUtilityGUI --windowed main.py`
+   - `pyinstaller --noconfirm --clean desktop_utility_gui.spec`
 
 2. Create the installer
    - Install Inno Setup (https://jrsoftware.org/isinfo.php)
-   - Open `installer/desktop_utility_gui.iss` and click Build (or run `ISCC installer\desktop_utility_gui.iss /DMyAppVersion=0.0.0`)
+   - Build: `ISCC installer\desktop_utility_gui.iss /DMyAppVersion=0.0.0`
    - Result: `installer/output/DesktopUtilityGUI-<version>-Setup.exe`
 
-Versioning Notes
+Versioning
+----------
+- `VERSION` is the only version source; CI writes Windows version resources from it.
+- We follow Conventional Commits. The bump type is manual to keep things simple. You can later switch to automated changelog/bumping with `release-please` or `python-semantic-release`.
+
+Startup Behavior
 ----------------
-- The release workflow updates only the `VERSION` file and uses it for the tag and installer naming.
-- We follow Conventional Commits. The workflow’s bump type is manual to keep things simple. You can later switch to tools like `release-please` or `python-semantic-release` if you want automatic bumping based on commit messages.
+- The installer adds a per‑user Startup shortcut (checked by default). Uncheck to opt out.
+- Uninstall removes the Startup entry.
 
 Troubleshooting
 ---------------
-- Build failures: Ensure `requirements.txt` is correct. Heavy dependencies (e.g., OCR) can increase build time.
-- Missing assets: If your app requires data files, consider adding PyInstaller `--add-data` options or a `.spec` file.
-- Startup option not applied: Verify the Startup shortcut exists in `shell:startup`. Reinstall with the task checked if needed.
-
+- Build time: OCR dependencies (e.g., EasyOCR/Torch) are large and increase build time.
+- Missing files at runtime: Ensure data files are listed in `desktop_utility_gui.spec` under `datas`.
+- Packaging failures: If PyInstaller can’t find a module, add it to `hiddenimports` in the spec.
