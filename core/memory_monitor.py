@@ -6,7 +6,12 @@ tracking object counts, and detecting potential memory leaks.
 """
 import gc
 import logging
-import psutil
+try:
+    import psutil  # type: ignore
+    _HAS_PSUTIL = True
+except Exception:  # pragma: no cover - optional dependency
+    psutil = None  # type: ignore
+    _HAS_PSUTIL = False
 import os
 import sys
 import tracemalloc
@@ -41,7 +46,8 @@ class MemoryMonitor:
         Args:
             enable_tracemalloc: Enable Python's tracemalloc for detailed tracking
         """
-        self.process = psutil.Process(os.getpid())
+        # psutil is optional; degrade gracefully if unavailable
+        self.process = psutil.Process(os.getpid()) if _HAS_PSUTIL else None
         self.snapshots: List[MemorySnapshot] = []
         self.baseline_snapshot: Optional[MemorySnapshot] = None
         self.tracemalloc_enabled = enable_tracemalloc
@@ -63,8 +69,15 @@ class MemoryMonitor:
             MemorySnapshot object with current memory stats
         """
         # Get process memory
-        memory_info = self.process.memory_info()
-        process_memory_mb = memory_info.rss / 1024 / 1024
+        if self.process is not None:
+            try:
+                memory_info = self.process.memory_info()
+                process_memory_mb = memory_info.rss / 1024 / 1024
+            except Exception:
+                process_memory_mb = 0.0
+        else:
+            # Fallback when psutil is not installed
+            process_memory_mb = 0.0
         
         # Count Python objects
         gc.collect()  # Force collection before counting
