@@ -9,7 +9,7 @@ import os
 import logging
 import argparse
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMessageBox
-from PyQt6.QtCore import Qt, QSharedMemory
+from PyQt6.QtCore import Qt, QLockFile, QDir, QStandardPaths
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -46,27 +46,56 @@ def setup_logging():
 
 
 class SingleApplication(QApplication):
-    """Ensures only one instance of the application runs"""
-    
-    def __init__(self, argv, key):
+    """Ensures only one instance of the application runs using QLockFile.
+
+    This avoids stale shared memory segments that can block restarts after crashes.
+    """
+
+    def __init__(self, argv, key: str):
         super().__init__(argv)
         self._key = key
-        self._timeout = 1000
-        
-        # For fixing potential issues with shared memory
-        self._shared_mem = QSharedMemory(self._key)
-        if self._shared_mem.attach():
+        self._running = False
+        self._lock = None
+
+        # Prepare a per-user lock file in a writable location
+        base_dir = QStandardPaths.writableLocation(QStandardPaths.AppConfigLocation)
+        if not base_dir:
+            base_dir = QDir.tempPath()
+        dir_obj = QDir(base_dir)
+        if not dir_obj.exists():
+            dir_obj.mkpath(".")
+
+        lock_path = dir_obj.filePath("desktop_utility_gui.lock")
+        self._lock = QLockFile(lock_path)
+        # Consider old locks stale to recover quickly after crashes
+        self._lock.setStaleLockTime(10000)  # 10 seconds
+
+        # Try to acquire lock immediately; if it fails, another instance is active
+        if not self._lock.tryLock(0):
             self._running = True
         else:
-            self._shared_mem.create(1)
             self._running = False
-    
-    def is_running(self):
+
+    def is_running(self) -> bool:
         return self._running
-    
+
+    def ensure_single_instance(self, enabled: bool) -> None:
+        """Honor user setting by enabling/disabling the lock guard at runtime."""
+        if not enabled:
+            # Release lock so multiple instances can run when setting is disabled
+            try:
+                if self._lock and self._lock.isLocked():
+                    self._lock.unlock()
+            except Exception:
+                pass
+            self._running = False
+
     def __del__(self):
-        if hasattr(self, '_shared_mem'):
-            self._shared_mem.detach()
+        try:
+            if self._lock and self._lock.isLocked():
+                self._lock.unlock()
+        except Exception:
+            pass
 
 
 class MVCApplication:
@@ -594,6 +623,8 @@ def main():
         from core.settings import SettingsManager
         settings = SettingsManager()
         single_instance_enabled = settings.get('behavior/single_instance', True)
+        # Adjust lock behavior to match setting
+        app.ensure_single_instance(single_instance_enabled)
         if single_instance_enabled and app.is_running():
             logger.warning("Another instance is already running. Exiting.")
             QMessageBox.information(
