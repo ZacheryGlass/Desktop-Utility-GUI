@@ -6,6 +6,8 @@ for the system tray icon and menu, while remaining "dumb" about
 business logic.
 """
 import logging
+import gc
+import weakref
 from typing import Optional, Dict, Any, List
 from PyQt6.QtWidgets import (QSystemTrayIcon, QMenu, QWidget)
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt
@@ -34,6 +36,11 @@ class TrayView(QObject):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__()
         self.parent = parent
+        
+        # Track menu objects for proper cleanup
+        self._menu_actions = []  # List to track QAction objects
+        self._submenus = []  # List to track QMenu objects
+        self._menu_update_count = 0  # Track updates for periodic cleanup
         
         # Create tray icon
         self.tray_icon = QSystemTrayIcon(parent)
@@ -84,14 +91,22 @@ class TrayView(QObject):
         logger.debug("Updating menu structure...")
         
         try:
+            # Perform deep cleanup of existing menu objects
+            self._cleanup_menu_objects()
+            
             # Clear existing menu
             self.context_menu.clear()
+            
+            # Reset tracking lists
+            self._menu_actions = []
+            self._submenus = []
             
             # Add title (clickable)
             title_text = menu_structure.get('title', 'Desktop Utilities')
             title_action = QAction(title_text, self.context_menu)
             title_action.triggered.connect(self.title_clicked.emit)
             self.context_menu.addAction(title_action)
+            self._menu_actions.append(title_action)
             
             # Add separator
             self.context_menu.addSeparator()
@@ -106,8 +121,14 @@ class TrayView(QObject):
             exit_action = QAction("Exit", self.context_menu)
             exit_action.triggered.connect(self.exit_requested.emit)
             self.context_menu.addAction(exit_action)
+            self._menu_actions.append(exit_action)
             
             logger.debug(f"Menu updated with {len(menu_items)} items")
+            
+            # Perform periodic aggressive cleanup
+            self._menu_update_count += 1
+            if self._menu_update_count % 10 == 0:
+                self._perform_aggressive_cleanup()
             
         except Exception as e:
             logger.error(f"Error updating menu structure: {e}")
@@ -130,9 +151,11 @@ class TrayView(QObject):
                 )
             
             parent_menu.addAction(action)
+            self._menu_actions.append(action)
             
         elif item_type == 'submenu':
             submenu = QMenu(text, parent_menu)
+            self._submenus.append(submenu)
             
             # Add submenu items
             submenu_items = item_data.get('items', [])
@@ -193,7 +216,63 @@ class TrayView(QObject):
             # Double-click: open settings (via title click signal)
             self.title_clicked.emit()
     
+    def _cleanup_menu_objects(self):
+        """Explicitly clean up menu objects to prevent accumulation."""
+        try:
+            # Disconnect and delete all tracked actions
+            for action in self._menu_actions:
+                try:
+                    # Disconnect all signals
+                    action.triggered.disconnect()
+                except:
+                    pass  # Might already be disconnected
+                
+                # Schedule for deletion
+                action.deleteLater()
+            
+            # Delete all submenus
+            for submenu in self._submenus:
+                submenu.clear()
+                submenu.deleteLater()
+            
+            # Clear tracking lists
+            self._menu_actions.clear()
+            self._submenus.clear()
+            
+            logger.debug("Menu objects cleaned up")
+            
+        except Exception as e:
+            logger.error(f"Error during menu cleanup: {e}")
+    
+    def _perform_aggressive_cleanup(self):
+        """Perform aggressive memory cleanup periodically."""
+        try:
+            # Force Qt to process deleteLater events
+            from PyQt6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app:
+                app.processEvents()
+            
+            # Force Python garbage collection
+            collected = gc.collect()
+            
+            logger.debug(f"Aggressive cleanup performed, collected {collected} objects")
+            
+        except Exception as e:
+            logger.error(f"Error during aggressive cleanup: {e}")
+    
     def cleanup(self):
         """Clean up resources"""
+        # Clean up menu objects
+        self._cleanup_menu_objects()
+        
+        # Clear the menu
+        self.context_menu.clear()
+        
+        # Hide tray icon
         self.tray_icon.hide()
+        
+        # Force final cleanup
+        self._perform_aggressive_cleanup()
+        
         logger.info("TrayView cleaned up")

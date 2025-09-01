@@ -24,6 +24,7 @@ from views.settings_view import SettingsView
 from views.hotkey_config_view import HotkeyConfigView
 from views.preset_editor_view import PresetEditorView
 from core.hotkey_manager import HotkeyManager
+from core.memory_monitor import get_memory_monitor
 
 
 def setup_logging():
@@ -87,6 +88,7 @@ class MVCApplication:
         self.main_view = None
         self.tray_view = None
         self.hotkey_manager = None
+        self.memory_monitor = None
         # Singleton settings dialog/controller
         self._settings_view = None
         self._settings_controller = None
@@ -95,6 +97,15 @@ class MVCApplication:
     def initialize(self):
         """Initialize all MVC components and set up connections"""
         self.logger.info("Initializing MVC application...")
+        
+        # Initialize memory monitoring
+        try:
+            self.memory_monitor = get_memory_monitor()
+            self.memory_monitor.set_baseline()
+            self.logger.info("Memory monitoring initialized")
+        except Exception as e:
+            self.logger.warning(f"Memory monitoring not available: {e}")
+            self.memory_monitor = None
         
         try:
             # Create main application controller (creates all models)
@@ -115,6 +126,11 @@ class MVCApplication:
             # Initialize application
             self.app_controller.initialize_application()
             
+            # Log initial memory usage
+            if self.memory_monitor:
+                memory_stats = self.memory_monitor.get_summary()
+                self.logger.info(f"Initial memory usage: {memory_stats.get('current_memory_mb', 0):.2f} MB")
+            
             self.logger.info("MVC application initialization complete")
             
         except Exception as e:
@@ -127,6 +143,17 @@ class MVCApplication:
     
     def shutdown(self):
         """Shutdown the application gracefully"""
+        # Log memory stats before shutdown
+        if self.memory_monitor:
+            final_stats = self.memory_monitor.get_summary()
+            self.logger.info(f"Final memory usage: {final_stats.get('current_memory_mb', 0):.2f} MB")
+            comparison = self.memory_monitor.compare_to_baseline()
+            self.logger.info(f"Memory growth: {comparison.get('memory_change_mb', 0):.2f} MB")
+            
+            if final_stats.get('potential_leak', False):
+                self.logger.warning("Potential memory leak detected during session")
+                leak_info = self.memory_monitor.detect_potential_leaks()
+                self.logger.warning(f"Leak details: {leak_info}")
         self.logger.info("Shutting down MVC application...")
         
         try:

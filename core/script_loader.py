@@ -160,18 +160,16 @@ class ScriptLoader:
         logger.info("Reloading all scripts")
         self.loaded_scripts.clear()
         
-        # Clear executor's module cache
-        self.executor.loaded_modules.clear()
-        
-        # Remove cached modules
-        modules_to_remove = []
-        for module_name in list(sys.modules.keys()):
-            if module_name.startswith(str(self.scripts_directory.name)):
-                modules_to_remove.append(module_name)
-        
-        logger.debug(f"Removing {len(modules_to_remove)} cached modules")
-        for module_name in modules_to_remove:
-            del sys.modules[module_name]
+        # Clear executor's module cache thoroughly (removes from sys.modules too)
+        try:
+            removed = self.executor.clear_module_cache()
+            logger.debug(f"Executor module cache cleared: {removed} module(s) removed")
+        except Exception:
+            # Backward compatibility: fall back to simple clear
+            try:
+                self.executor.loaded_modules.clear()
+            except Exception:
+                pass
         
         return self.discover_scripts()
     

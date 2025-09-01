@@ -207,6 +207,13 @@ class SettingsView(QDialog):
         self.script_table.verticalHeader().setVisible(False)  # Hide row numbers
         self.script_table.setShowGrid(True)  # Show grid lines for clarity
         self.script_table.setWordWrap(False)  # Prevent widgets/text from wrapping across columns
+        # Ensure enough row height so cell widgets aren't clipped
+        vh = self.script_table.verticalHeader()
+        try:
+            vh.setDefaultSectionSize(34)
+            vh.setMinimumSectionSize(28)
+        except Exception:
+            pass
         
         # Set up proper column sizing
         header = self.script_table.horizontalHeader()
@@ -281,6 +288,13 @@ class SettingsView(QDialog):
         self.preset_table.verticalHeader().setVisible(False)
         self.preset_table.setShowGrid(True)
         self.preset_table.setWordWrap(False)
+        # Ensure enough row height for action buttons
+        p_vh = self.preset_table.verticalHeader()
+        try:
+            p_vh.setDefaultSectionSize(34)
+            p_vh.setMinimumSectionSize(28)
+        except Exception:
+            pass
 
         # Column sizing similar to Scripts tab
         p_header = self.preset_table.horizontalHeader()
@@ -413,7 +427,16 @@ class SettingsView(QDialog):
             return
 
         # Update the HOTKEY cell's button text and tooltip
-        btn = self.script_table.cellWidget(row_index, 3)
+        widget = self.script_table.cellWidget(row_index, 3)
+        btn = None
+        # Support either direct QPushButton or a container with a child button
+        if isinstance(widget, QPushButton):
+            btn = widget
+        elif widget is not None:
+            try:
+                btn = widget.findChild(QPushButton)
+            except Exception:
+                btn = None
         if isinstance(btn, QPushButton):
             new_text = hotkey if hotkey else 'Click to set'
             btn.setText(new_text)
@@ -459,8 +482,18 @@ class SettingsView(QDialog):
         for row, script in enumerate(self._script_data):
             # Action button (disable or remove) - column 0
             action_btn = QPushButton()
-            action_btn.setMaximumHeight(28)
-            action_btn.setStyleSheet("QPushButton { padding: 2px 8px; }")
+            action_btn.setStyleSheet(
+                "QPushButton { background: transparent; border: none; border-radius: 0; padding: 0; margin: 0; text-align: center; }"
+                "QPushButton:hover { background: transparent; }"
+                "QPushButton:pressed { background: transparent; }"
+                "QPushButton:disabled { background: transparent; color: #6E6F78; }"
+            )
+            try:
+                from PyQt6.QtWidgets import QSizePolicy
+                action_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            except Exception:
+                pass
+            action_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
             name_key = script.get('original_display_name', script['display_name'])
             if script['is_external']:
@@ -478,20 +511,32 @@ class SettingsView(QDialog):
                 action_btn.clicked.connect(
                     lambda checked, s=name_key: self._on_action_clicked(s, is_external=False)
                 )
+            # Make the entire cell act as the button (fills cell, no rounded edges)
             self.script_table.setCellWidget(row, 0, action_btn)
 
             # Display Name (customizable) - column 1
             custom_name = script.get('custom_name', '')
             custom_btn_text = custom_name if custom_name else 'Click to set'
             custom_name_btn = QPushButton(custom_btn_text)
-            custom_name_btn.setMaximumHeight(28)
-            custom_name_btn.setStyleSheet("QPushButton { text-align: center; padding: 2px 4px; }")
+            custom_name_btn.setStyleSheet(
+                "QPushButton { background: transparent; border: none; border-radius: 0; padding: 0; margin: 0; text-align: center; }"
+                "QPushButton:hover { background: transparent; }"
+                "QPushButton:pressed { background: transparent; }"
+                "QPushButton:disabled { background: transparent; color: #6E6F78; }"
+            )
+            try:
+                from PyQt6.QtWidgets import QSizePolicy
+                custom_name_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            except Exception:
+                pass
+            custom_name_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             custom_name_btn.setToolTip(
                 f"Custom name: {custom_name}" if custom_name else "Click to set a custom display name"
             )
             custom_name_btn.clicked.connect(
                 lambda checked, s=script['name']: self._on_set_custom_name(s)
             )
+            # Make the entire cell act as the button (fills cell, no rounded edges)
             self.script_table.setCellWidget(row, 1, custom_name_btn)
 
             # Filename (explicitly show the underlying file name) - column 2
@@ -517,8 +562,18 @@ class SettingsView(QDialog):
             raw_hotkey = script.get('hotkey', '')
             hotkey_text = raw_hotkey if raw_hotkey else 'Click to set'
             hotkey_btn = QPushButton(hotkey_text)
-            hotkey_btn.setMaximumHeight(28)  # Prevent button from being too tall
-            hotkey_btn.setStyleSheet("QPushButton { text-align: center; padding: 2px 4px; }")
+            hotkey_btn.setStyleSheet(
+                "QPushButton { background: transparent; border: none; border-radius: 0; padding: 0; margin: 0; text-align: center; }"
+                "QPushButton:hover { background: transparent; }"
+                "QPushButton:pressed { background: transparent; }"
+                "QPushButton:disabled { background: transparent; color: #6E6F78; }"
+            )
+            try:
+                from PyQt6.QtWidgets import QSizePolicy
+                hotkey_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            except Exception:
+                pass
+            hotkey_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             if raw_hotkey:
                 hotkey_btn.setToolTip(f"Current hotkey: {raw_hotkey}\nClick to change")
             else:
@@ -526,13 +581,28 @@ class SettingsView(QDialog):
             hotkey_btn.clicked.connect(
                 lambda checked, s=script['name']: self.hotkey_configuration_requested.emit(s)
             )
+            # Make the entire cell act as the button (fills cell, no rounded edges)
             self.script_table.setCellWidget(row, 3, hotkey_btn)
         
-        # Set consistent row height and ensure proper layout
+        # Let Qt compute proper heights so content isn't clipped
         self.script_table.resizeRowsToContents()
-        # Add a bit of padding to rows
-        for row in range(self.script_table.rowCount()):
-            self.script_table.setRowHeight(row, 32)  # Fixed height for consistency
+        # Bump default row height based on content size hints to avoid hover clipping
+        try:
+            vh = self.script_table.verticalHeader()
+            max_h = 0
+            if self.script_table.rowCount() > 0:
+                # Inspect first row widgets/items for a representative height
+                for c in range(self.script_table.columnCount()):
+                    w = self.script_table.cellWidget(0, c)
+                    if w is not None:
+                        max_h = max(max_h, w.sizeHint().height())
+                item = self.script_table.item(0, 2)
+                if item is not None:
+                    max_h = max(max_h, self.fontMetrics().height() + 8)
+            if max_h:
+                vh.setDefaultSectionSize(max(max_h + 6, vh.minimumSectionSize()))
+        except Exception:
+            pass
 
         # Apply disabled styling for built-in scripts
         for row, script in enumerate(self._script_data):
@@ -603,24 +673,39 @@ class SettingsView(QDialog):
             # ACTIONS cell: Edit + Delete buttons
             actions_widget = QWidget()
             actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(2, 2, 2, 2)
-            actions_layout.setSpacing(6)
+            actions_layout.setContentsMargins(0, 0, 0, 0)
+            actions_layout.setSpacing(0)
 
             edit_btn = QPushButton("Edit")
-            edit_btn.setMaximumHeight(28)
-            edit_btn.setStyleSheet("QPushButton { padding: 2px 8px; }")
+            edit_btn.setStyleSheet(
+                "QPushButton { border: none; border-radius: 0; padding: 0; margin: 0; }"
+                "QPushButton:hover { background-color: #5A5B64; }"
+            )
+            try:
+                from PyQt6.QtWidgets import QSizePolicy
+                edit_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            except Exception:
+                pass
+            edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             edit_btn.setToolTip(f"Edit preset '{preset_name}'")
             edit_btn.clicked.connect(lambda checked=False, p=preset_name: self._on_edit_preset_named(p))
             actions_layout.addWidget(edit_btn)
 
             del_btn = QPushButton("Delete")
-            del_btn.setMaximumHeight(28)
-            del_btn.setStyleSheet("QPushButton { padding: 2px 8px; }")
+            del_btn.setStyleSheet(
+                "QPushButton { border: none; border-radius: 0; padding: 0; margin: 0; }"
+                "QPushButton:hover { background-color: #5A5B64; }"
+            )
+            try:
+                from PyQt6.QtWidgets import QSizePolicy
+                del_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            except Exception:
+                pass
+            del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             del_btn.setToolTip(f"Delete preset '{preset_name}'")
             del_btn.clicked.connect(lambda checked=False, p=preset_name: self._on_delete_preset_named(p))
             actions_layout.addWidget(del_btn)
-
-            actions_layout.addStretch()
+            # No stretch; both buttons fill the entire cell horizontally and vertically
             self.preset_table.setCellWidget(row, 0, actions_widget)
 
             # PRESET NAME cell
@@ -640,10 +725,22 @@ class SettingsView(QDialog):
                 args_item.setToolTip("\n".join(args_pairs))
             self.preset_table.setItem(row, 2, args_item)
 
-        # Consistent row height
+        # Let Qt compute appropriate heights and ensure default row height is sufficient
         self.preset_table.resizeRowsToContents()
-        for r in range(self.preset_table.rowCount()):
-            self.preset_table.setRowHeight(r, 32)
+        try:
+            p_vh = self.preset_table.verticalHeader()
+            max_h = 0
+            if self.preset_table.rowCount() > 0:
+                for c in range(self.preset_table.columnCount()):
+                    w = self.preset_table.cellWidget(0, c)
+                    if w is not None:
+                        max_h = max(max_h, w.sizeHint().height())
+                # Account for text rows
+                max_h = max(max_h, self.fontMetrics().height() + 8)
+            if max_h:
+                p_vh.setDefaultSectionSize(max(max_h + 6, p_vh.minimumSectionSize()))
+        except Exception:
+            pass
     
     # UI event handlers
     

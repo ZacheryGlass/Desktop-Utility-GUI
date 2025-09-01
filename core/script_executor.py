@@ -3,9 +3,12 @@ import sys
 import importlib.util
 import json
 import logging
+import time
+import weakref
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass
+from collections import OrderedDict
 
 from .script_analyzer import ScriptInfo, ExecutionStrategy, ArgumentInfo
 
@@ -21,12 +24,20 @@ class ExecutionResult:
     data: Optional[Dict[str, Any]] = None
 
 class ScriptExecutor:
-    def __init__(self, settings=None):
-        self.loaded_modules = {}
+    def __init__(self, settings=None, max_cache_size=50, cache_ttl_seconds=3600):
+        # Use OrderedDict for LRU cache behavior
+        self.loaded_modules = OrderedDict()
+        self.module_access_times = {}  # Track last access time
         self.settings = settings
+        self.max_cache_size = max_cache_size  # Maximum number of cached modules
+        self.cache_ttl_seconds = cache_ttl_seconds  # Time-to-live in seconds (1 hour default)
+        self._last_cleanup_time = time.time()
     
     def execute_script(self, script_info: ScriptInfo, arguments: Optional[Dict[str, Any]] = None) -> ExecutionResult:
         """Execute a script using the appropriate strategy."""
+        # Perform periodic cleanup
+        self._cleanup_stale_modules()
+        
         if not script_info.is_executable:
             return ExecutionResult(
                 success=False,
@@ -129,6 +140,10 @@ class ScriptExecutor:
             module_name = script_info.file_path.stem
             
             if module_name in self.loaded_modules:
+                # Move to end for LRU ordering
+                self.loaded_modules.move_to_end(module_name)
+                self.module_access_times[module_name] = time.time()
+                
                 # Reload module for changes; ensure present in sys.modules for reload()
                 module = self.loaded_modules[module_name]
                 try:
@@ -146,7 +161,7 @@ class ScriptExecutor:
                     module = importlib.util.module_from_spec(spec)
                     sys.modules[module_name] = module
                     spec.loader.exec_module(module)
-                    self.loaded_modules[module_name] = module
+                    self._cache_module(module_name, module)
             else:
                 # Load module for first time
                 spec = importlib.util.spec_from_file_location(module_name, script_info.file_path)
@@ -160,7 +175,7 @@ class ScriptExecutor:
                 # Insert into sys.modules before execution to support reloads/circular imports
                 sys.modules[module_name] = module
                 spec.loader.exec_module(module)
-                self.loaded_modules[module_name] = module
+                self._cache_module(module_name, module)
             
             # Get the main function
             if not hasattr(module, script_info.main_function or 'main'):
@@ -302,3 +317,78 @@ class ScriptExecutor:
                         errors.append(f"Argument '{arg_info.name}' must be a number")
         
         return errors
+    
+    def _cache_module(self, module_name: str, module):
+        """Cache a module with LRU eviction if needed."""
+        # Check if we need to evict old modules
+        if len(self.loaded_modules) >= self.max_cache_size:
+            # Remove least recently used (first item)
+            oldest_name, oldest_module = self.loaded_modules.popitem(last=False)
+            self.module_access_times.pop(oldest_name, None)
+            # Remove from sys.modules to allow garbage collection
+            sys.modules.pop(oldest_name, None)
+            logger.debug(f"Evicted module from cache: {oldest_name}")
+        
+        # Add new module
+        self.loaded_modules[module_name] = module
+        self.module_access_times[module_name] = time.time()
+    
+    def _cleanup_stale_modules(self):
+        """Remove modules that haven't been accessed recently."""
+        current_time = time.time()
+        
+        # Only cleanup periodically (every 5 minutes)
+        if current_time - self._last_cleanup_time < 300:
+            return
+        
+        self._last_cleanup_time = current_time
+        stale_modules = []
+        
+        # Find stale modules
+        for module_name, last_access in self.module_access_times.items():
+            if current_time - last_access > self.cache_ttl_seconds:
+                stale_modules.append(module_name)
+        
+        # Remove stale modules
+        for module_name in stale_modules:
+            if module_name in self.loaded_modules:
+                del self.loaded_modules[module_name]
+                del self.module_access_times[module_name]
+                sys.modules.pop(module_name, None)
+                logger.debug(f"Removed stale module from cache: {module_name}")
+        
+        if stale_modules:
+            logger.info(f"Cleaned up {len(stale_modules)} stale module(s) from cache")
+    
+    def clear_module_cache(self):
+        """Manually clear all cached modules."""
+        count = len(self.loaded_modules)
+        
+        # Remove all modules from sys.modules
+        for module_name in list(self.loaded_modules.keys()):
+            sys.modules.pop(module_name, None)
+        
+        self.loaded_modules.clear()
+        self.module_access_times.clear()
+        
+        logger.info(f"Cleared {count} module(s) from cache")
+        return count
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get statistics about the module cache."""
+        current_time = time.time()
+        stats = {
+            'cached_modules': len(self.loaded_modules),
+            'max_cache_size': self.max_cache_size,
+            'cache_ttl_seconds': self.cache_ttl_seconds,
+            'modules': []
+        }
+        
+        for module_name in self.loaded_modules:
+            last_access = self.module_access_times.get(module_name, 0)
+            stats['modules'].append({
+                'name': module_name,
+                'age_seconds': int(current_time - last_access) if last_access else None
+            })
+        
+        return stats

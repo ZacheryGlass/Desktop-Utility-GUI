@@ -4,3 +4,5 @@ pywin32>=305
 easyocr>=1.6.0
 Pillow>=9.0.0
 pyautogui>=0.9.50
+# Memory monitoring
+psutil>=5.9.0
